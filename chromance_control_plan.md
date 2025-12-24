@@ -33,10 +33,11 @@ Update `platformio.ini` to define at least:
 
 1) `env:diagnostic` (ESP32 firmware)
    - `platform = espressif32`, `board = featheresp32`, `framework = arduino`
-   - `lib_deps` includes DotStar library (typically `adafruit/Adafruit DotStar`)
-   - OTA-capable partitions:
-     - Verify the board’s default partition scheme includes `otadata`, `ota_0`, `ota_1`.
-     - If not, add `partitions.csv` and set `board_build.partitions = partitions.csv`.
+   - `lib_deps` includes DotStar library (pin a compatible semver range):
+     - `adafruit/Adafruit DotStar @ ^1.2.0`
+   - OTA-capable partitions (mandatory):
+     - Set `board_build.partitions = min_spiffs.csv`
+     - Do not use `huge_app.csv` (it can remove OTA support unless explicitly verified)
    - `src_filter` includes only the diagnostic entrypoint + shared modules:
      - Include: `src/main_diagnostic.cpp`, `src/core/**`, `src/platform/**`
      - Exclude other mains (future-proofing).
@@ -68,6 +69,27 @@ Pick one of these compile-time approaches (prefer A; implement B as fallback):
 - `src/platform/wifi_config.h` includes this header and provides defaults/error messages if missing.
 
 OTA “safe on failure” depends primarily on the partition layout + bootloader behavior; ArduinoOTA handles transfer + writing, but the partition scheme must support true A/B OTA.
+
+## 3.1) OTA Validity Marking (Rollback Discipline)
+
+Requirement: new firmware must only be marked as valid after `setup()` completes successfully, to preserve rollback behavior if early boot crashes.
+
+Implementation plan:
+- In `main_diagnostic.cpp`, after all critical initialization succeeds (LED init, WiFi connect attempt, OTA begin, pattern init), call ESP32 validity APIs when available:
+  - Prefer `esp_ota_mark_app_valid_cancel_rollback()` (ESP-IDF / Arduino-ESP32 integration)
+  - If the symbol is unavailable in the selected core version/config, log a warning and continue (but keep the structure in place)
+- Print firmware version at boot and at OTA start (see §3.2).
+
+## 3.2) Firmware Version Identifier (compile-time)
+
+Requirement: embed a compile-time version string and print it:
+- At boot (Serial)
+- At OTA start (Serial)
+
+Plan:
+- Define in Arduino-facing code (e.g., `main_diagnostic.cpp`):
+  - `constexpr char kFirmwareVersion[] = "diagnostic-0.1.0";`
+- Optionally also expose to platform OTA module for consistent printing.
 
 ## 4) Codebase Architecture & File Layout (target structure)
 
@@ -107,7 +129,10 @@ Define the installation configuration as compile-time constants:
   - `segment_count` (11, 12, 6, 11)
   - `reversed` (bool)
   - `data_pin`, `clock_pin` (GPIO numbers; numeric constants only)
-  - `color` (distinct diagnostic color per strip)
+  - `diagnostic_color` (distinct diagnostic color per strip; compile-time data)
+
+Add a compile-time diagnostic brightness cap (required) to prevent power issues and improve clarity:
+- `constexpr uint8_t kDiagnosticBrightness = 64;`
 
 Add compile-time validation with `static_assert`:
 - Segment counts sum to 40.
@@ -210,6 +235,7 @@ Implementation notes:
 - Allocate pixel buffers in the library once; do not allocate per frame.
 - Use per-strip update + show to preserve “one strip failing must not affect others”.
 - Decide + document the DotStar color order constant (`DOTSTAR_BRG`, etc.) based on physical strips; expose as compile-time config if uncertain.
+- Apply the diagnostic brightness cap consistently (use `setBrightness(kDiagnosticBrightness)` or equivalent) at initialization.
 
 ## 10) Platform Layer: WiFi + OTA (platform/ota.*)
 
@@ -217,7 +243,7 @@ Responsibilities:
 - Connect to WiFi (STA mode) using compile-time credentials.
 - Initialize ArduinoOTA with:
   - Hostname, optional password
-  - Start/end/progress/error callbacks (at minimum, log to Serial)
+  - Start/end/progress/error callbacks (at minimum, log to Serial; print firmware version at OTA start)
 - Provide:
   - `begin()` (connect + OTA begin)
   - `handle()` (called frequently from `loop()`)
@@ -236,15 +262,25 @@ Responsibilities:
 - Instantiate platform + core objects.
 - `setup()`:
   - Serial init
+  - Print `kFirmwareVersion` at boot
   - LED init and clear all strips
   - WiFi connect + OTA begin
   - Create diagnostic pattern (colors from layout)
+  - Mark OTA image valid after successful setup (see §3.1)
 - `loop()`:
   - `ota.handle()` every iteration
   - `pattern.tick(now_ms)`
   - If it’s time to render (based on frame clock), call `pattern.render(leds)` and `leds.show_all()` (or per-strip)
 
 Avoid `delay()`; use `millis()` for time, and a simple frame clock (e.g., render every 10–20ms).
+
+### 11.1) Optional: Minimal Serial “Escape Hatch” (defer if desired)
+
+Optional during bring-up (keep minimal; not a CLI):
+- One-character commands over Serial, e.g.:
+  - Reset diagnostics to segment 0
+  - Force focus a specific strip (only that strip animates)
+- Keep this behind a compile-time flag (e.g., `-D ENABLE_SERIAL_DEBUG=1`) if added.
 
 ## 12) Unit Tests (host, PlatformIO native)
 
@@ -279,10 +315,14 @@ Do not test:
   - Per-strip distinct colors, independent progress, no `delay()`.
   - Segment-by-segment with 5 flashes each, then latched ON, then advance.
   - Restarts after last segment.
+- Diagnostic brightness is capped via `kDiagnosticBrightness`.
 - OTA:
+  - `platformio.ini` uses `board_build.partitions = min_spiffs.csv`.
   - Firmware can be updated via ArduinoOTA / espota workflow.
   - OTA handling is continuously serviced in `loop()`.
   - Partition scheme supports OTA safely (A/B or equivalent).
+  - Firmware is only marked valid after successful `setup()` (rollback discipline), when supported by the selected ESP32 core.
+- Firmware prints `kFirmwareVersion` at boot and OTA start.
 - `pio test -e native` passes with meaningful coverage of mapping + state machine.
 - Core code has no Arduino includes and no dynamic allocation in per-frame loops.
 
@@ -306,4 +346,3 @@ Do not test:
    - Implement `platform/dotstar_leds.*` + `platform/ota.*`
    - Implement `main_diagnostic.cpp` wiring
    - Manual on-device sanity check (LED behavior + OTA upload)
-
