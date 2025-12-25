@@ -1,3 +1,16 @@
+### 2025-12-24 — DotStar strip GPIO pin mapping updated
+
+Status: 🟢 Done
+
+What was done:
+- Set the compile-time DATA/CLOCK GPIO pins for all 4 DotStar strips to match the provided wiring table
+
+Files referenced:
+- src/core/layout.h
+
+Notes / Decisions:
+- Strip 1 uses GPIO23/GPIO22, strip 2 uses GPIO19/GPIO18, strip 3 uses GPIO17/GPIO16, strip 4 uses GPIO14/GPIO32
+
 ### 2025-12-24 — Diagnostic firmware build fixed and verified
 
 Status: 🟢 Done
@@ -13,6 +26,19 @@ Files referenced:
 
 Notes / Decisions:
 - `OTA_HOSTNAME` now defaults via `src/platform/wifi_config.h` and can be overridden via `OTA_HOSTNAME` environment variable (applied in `scripts/wifi_from_env.py`)
+
+### 2025-12-24 — Applied DotStar GPIO pin assignment
+
+Status: 🟢 Done
+
+What was done:
+- Updated the compile-time strip pin mapping to match the provided DATA/CLOCK GPIO assignment for all 4 strips
+
+Files referenced:
+- src/core/layout.h
+
+Notes / Decisions:
+- Strip 1 uses GPIO23/GPIO22, strip 2 uses GPIO19/GPIO18, strip 3 uses GPIO17/GPIO16, strip 4 uses GPIO14/GPIO32
 
 ### 2025-12-24 — Diagnostic firmware scaffold + native unit tests added
 
