@@ -54,10 +54,10 @@ void DotstarLeds::show_all() {
   }
 }
 
-void DotstarLeds::set_segment(uint8_t strip_index,
-                              uint16_t segment_index,
-                              core::Rgb color,
-                              bool on) {
+void DotstarLeds::set_segment_all(uint8_t strip_index,
+                                  uint16_t segment_index,
+                                  core::Rgb color,
+                                  bool on) {
   if (strip_index >= core::kStripCount) {
     return;
   }
@@ -81,6 +81,32 @@ void DotstarLeds::set_segment(uint8_t strip_index,
   }
 }
 
+void DotstarLeds::set_segment_single_led(uint8_t strip_index,
+                                         uint16_t segment_index,
+                                         uint8_t led_in_segment,
+                                         core::Rgb color) {
+  if (strip_index >= core::kStripCount) {
+    return;
+  }
+  Adafruit_DotStar* strip = strips_[strip_index];
+  if (strip == nullptr) {
+    return;
+  }
+
+  const core::StripConfig& cfg = core::kStripConfigs[strip_index];
+  if (!core::is_valid_segment_index(cfg, segment_index)) {
+    return;
+  }
+  if (led_in_segment >= core::kLedsPerSegment) {
+    return;
+  }
+
+  const uint16_t start_led = core::segment_start_led(cfg, segment_index);
+  for (uint8_t i = 0; i < core::kLedsPerSegment; ++i) {
+    strip->setPixelColor(start_led + i, 0, 0, 0);
+  }
+  strip->setPixelColor(start_led + led_in_segment, color.r, color.g, color.b);
+}
+
 }  // namespace platform
 }  // namespace chromance
-

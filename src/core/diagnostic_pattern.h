@@ -11,10 +11,14 @@ namespace core {
 class IDiagnosticRenderer {
  public:
   virtual ~IDiagnosticRenderer() {}
-  virtual void set_segment(uint8_t strip_index,
-                           uint16_t segment_index,
-                           Rgb color,
-                           bool on) = 0;
+  virtual void set_segment_all(uint8_t strip_index,
+                               uint16_t segment_index,
+                               Rgb color,
+                               bool on) = 0;
+  virtual void set_segment_single_led(uint8_t strip_index,
+                                      uint16_t segment_index,
+                                      uint8_t led_in_segment,
+                                      Rgb color) = 0;
 };
 
 class DiagnosticPattern {
@@ -43,7 +47,16 @@ class DiagnosticPattern {
     for (uint8_t strip = 0; strip < kStripCount; ++strip) {
       const StripConfig& cfg = kStripConfigs[strip];
       for (uint16_t seg = 0; seg < cfg.segment_count; ++seg) {
-        renderer.set_segment(strip, seg, cfg.diagnostic_color, strip_sms_[strip].is_segment_on(seg));
+        const auto& sm = strip_sms_[strip];
+        if (seg < sm.current_segment()) {
+          renderer.set_segment_all(strip, seg, cfg.diagnostic_color, true);
+        } else if (seg > sm.current_segment()) {
+          renderer.set_segment_all(strip, seg, cfg.diagnostic_color, false);
+        } else if (sm.phase() == DiagnosticStripStateMachine::Phase::LatchedOn) {
+          renderer.set_segment_all(strip, seg, cfg.diagnostic_color, true);
+        } else {
+          renderer.set_segment_single_led(strip, seg, sm.current_led(), cfg.diagnostic_color);
+        }
       }
     }
   }
@@ -58,4 +71,3 @@ class DiagnosticPattern {
 
 }  // namespace core
 }  // namespace chromance
-

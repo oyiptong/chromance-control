@@ -11,6 +11,26 @@ Files referenced:
 Notes / Decisions:
 - Strip 1 uses GPIO23/GPIO22, strip 2 uses GPIO19/GPIO18, strip 3 uses GPIO17/GPIO16, strip 4 uses GPIO14/GPIO32
 
+### 2025-12-25 — Diagnostic pattern changed to per-segment LED chase
+
+Status: 🟢 Done
+
+What was done:
+- Replaced per-segment flashing diagnostics with a per-segment LED chase: light LED indices 0→13 at 0.5s steps, repeat 5 times, then latch the full segment ON and advance
+- Updated the diagnostic renderer interface and DotStar platform implementation to support “single LED within segment” rendering
+- Updated and revalidated host unit tests, and confirmed `pio run -e diagnostic` builds successfully
+
+Files referenced:
+- src/core/diagnostic_strip_sm.h
+- src/core/diagnostic_pattern.h
+- src/platform/dotstar_leds.h
+- src/platform/dotstar_leds.cpp
+- test/test_diagnostic_pattern.cpp
+- test/test_main.cpp
+
+Notes / Decisions:
+- Segment/strip colors remain unchanged; only the diagnostic animation logic was updated
+
 ### 2025-12-24 — Diagnostic firmware build fixed and verified
 
 Status: 🟢 Done
