@@ -9,6 +9,20 @@ What was done:
 Files referenced:
 - src/core/layout.h
 
+### 2025-12-26 — Segment diagnostics updated to chase LEDs then flash by order
+
+Status: 🟢 Done
+
+What was done:
+- Updated per-segment diagnostics so each segment first “chases” a single lit LED across indices 0→13 for 3 full passes (1 second per pass), then flashes the full segment a number of times equal to its 1-based segment order, then latches ON
+- Updated segment-diagnostics rendering to use the single-LED renderer during chase, while keeping previous segments latched ON and later segments OFF
+- Updated host unit tests and verified `pio test -e native` and `pio run -e diagnostic`
+
+Files referenced:
+- src/core/diagnostic_strip_sm.h
+- src/core/diagnostic_pattern.h
+- test/test_diagnostic_pattern.cpp
+
 ### 2025-12-26 — Diagnostic colors labeled with named constants
 
 Status: 🔵 Decision

@@ -60,14 +60,35 @@ void test_strip_sm_segment_order_flash_counts() {
   uint32_t t = 0;
 
   TEST_ASSERT_EQUAL_UINT16(0, sm.current_segment());
-  TEST_ASSERT_EQUAL(DiagnosticStripStateMachine::Phase::FlashOff, sm.phase());
+  TEST_ASSERT_EQUAL(DiagnosticStripStateMachine::Phase::ChaseSingleLed, sm.phase());
+  TEST_ASSERT_EQUAL_UINT8(0, sm.current_led());
+  TEST_ASSERT_EQUAL_UINT8(0, sm.chase_pass_index());
   TEST_ASSERT_FALSE(sm.is_segment_on(0));
 
-  // Segment 0: flashes 1 time, then latches on.
-  tick_to_next_transition(sm, t);
+  // Chase LED 0..13 for 3 passes.
+  for (uint8_t pass = 0; pass < DiagnosticStripStateMachine::kChasePassCount; ++pass) {
+    for (uint8_t led = 1; led < chromance::core::kLedsPerSegment; ++led) {
+      tick_to_next_transition(sm, t);
+      TEST_ASSERT_EQUAL(DiagnosticStripStateMachine::Phase::ChaseSingleLed, sm.phase());
+      TEST_ASSERT_EQUAL_UINT8(pass, sm.chase_pass_index());
+      TEST_ASSERT_EQUAL_UINT8(led, sm.current_led());
+    }
+
+    // End-of-pass transition (LED 13 -> either next pass LED 0, or flashing).
+    tick_to_next_transition(sm, t);
+    if (pass + 1 < DiagnosticStripStateMachine::kChasePassCount) {
+      TEST_ASSERT_EQUAL(DiagnosticStripStateMachine::Phase::ChaseSingleLed, sm.phase());
+      TEST_ASSERT_EQUAL_UINT8(pass + 1, sm.chase_pass_index());
+      TEST_ASSERT_EQUAL_UINT8(0, sm.current_led());
+    }
+  }
+
+  // After 3 passes, begin flashing (segment 0).
   TEST_ASSERT_EQUAL(DiagnosticStripStateMachine::Phase::FlashOn, sm.phase());
   TEST_ASSERT_TRUE(sm.is_segment_on(0));
+  TEST_ASSERT_EQUAL_UINT8(0, sm.flashes_completed());
 
+  // Segment 0: flashes 1 time, then latches on.
   tick_to_next_transition(sm, t);
   TEST_ASSERT_EQUAL(DiagnosticStripStateMachine::Phase::FlashOff, sm.phase());
   TEST_ASSERT_EQUAL_UINT8(1, sm.flashes_completed());
@@ -81,10 +102,15 @@ void test_strip_sm_segment_order_flash_counts() {
   TEST_ASSERT_EQUAL_UINT16(1, sm.current_segment());
   TEST_ASSERT_TRUE(sm.is_segment_on(0));
   TEST_ASSERT_FALSE(sm.is_segment_on(1));
+  TEST_ASSERT_EQUAL(DiagnosticStripStateMachine::Phase::ChaseSingleLed, sm.phase());
+
+  // Skip chase for segment 1.
+  while (sm.phase() == DiagnosticStripStateMachine::Phase::ChaseSingleLed) {
+    tick_to_next_transition(sm, t);
+  }
+  TEST_ASSERT_EQUAL(DiagnosticStripStateMachine::Phase::FlashOn, sm.phase());
 
   // Segment 1: requires 2 flashes; after 1 flash it should not latch.
-  tick_to_next_transition(sm, t);  // FlashOff -> FlashOn
-  TEST_ASSERT_EQUAL(DiagnosticStripStateMachine::Phase::FlashOn, sm.phase());
   tick_to_next_transition(sm, t);  // FlashOn -> FlashOff (flash 1 complete)
   TEST_ASSERT_EQUAL(DiagnosticStripStateMachine::Phase::FlashOff, sm.phase());
   TEST_ASSERT_EQUAL_UINT8(1, sm.flashes_completed());
@@ -100,7 +126,14 @@ void test_strip_sm_done_after_last_segment() {
   sm.reset(0);
 
   uint32_t t = 0;
-  tick_to_next_transition(sm, t);  // FlashOff -> FlashOn
+
+  // Skip chase for the only segment.
+  while (sm.phase() == DiagnosticStripStateMachine::Phase::ChaseSingleLed) {
+    tick_to_next_transition(sm, t);
+  }
+
+  TEST_ASSERT_EQUAL(DiagnosticStripStateMachine::Phase::FlashOn, sm.phase());
+
   tick_to_next_transition(sm, t);  // FlashOn -> FlashOff (flash 1 complete)
   tick_to_next_transition(sm, t);  // FlashOff -> LatchedOn
   TEST_ASSERT_FALSE(sm.is_done());
@@ -165,7 +198,7 @@ void test_pattern_phase_sequence_and_restart() {
   }
 
   // Fast-forward until all strips complete their segments; pattern should restart to all-off hold.
-  pattern.tick(10000);
+  pattern.tick(1000000);
   TEST_ASSERT_EQUAL(static_cast<uint8_t>(DiagnosticPattern::Phase::AllOffHold),
                     static_cast<uint8_t>(pattern.phase()));
   renderer.clear();

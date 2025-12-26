@@ -128,10 +128,22 @@ class DiagnosticPattern {
         } else if (all_off) {
           renderer.set_segment_all(strip, seg, cfg.diagnostic_color, false);
         } else {
-          renderer.set_segment_all(strip,
-                                   seg,
-                                   cfg.diagnostic_color,
-                                   strip_sms_[strip].is_segment_on(seg));
+          const auto& sm = strip_sms_[strip];
+
+          if (sm.phase() == DiagnosticStripStateMachine::Phase::DoneFullOn) {
+            renderer.set_segment_all(strip, seg, cfg.diagnostic_color, true);
+          } else if (seg < sm.current_segment()) {
+            renderer.set_segment_all(strip, seg, cfg.diagnostic_color, true);
+          } else if (seg > sm.current_segment()) {
+            renderer.set_segment_all(strip, seg, cfg.diagnostic_color, false);
+          } else if (sm.phase() == DiagnosticStripStateMachine::Phase::ChaseSingleLed) {
+            renderer.set_segment_single_led(strip, seg, sm.current_led(), cfg.diagnostic_color);
+          } else if (sm.phase() == DiagnosticStripStateMachine::Phase::FlashOn ||
+                     sm.phase() == DiagnosticStripStateMachine::Phase::LatchedOn) {
+            renderer.set_segment_all(strip, seg, cfg.diagnostic_color, true);
+          } else {
+            renderer.set_segment_all(strip, seg, cfg.diagnostic_color, false);
+          }
         }
       }
     }
