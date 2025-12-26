@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 900 650">
+  <defs>
+    <style>
+      .seg { stroke:#222; stroke-width:14; stroke-linecap:round; fill:none; }
+      .hub { fill:#111; }
+    </style>
+  </defs>
+
+  <!--
+    Regular pointy-top hex geometry where:
+      - perimeter segment length = s
+      - center-to-vertex segment length = s
+    We set s = 90, so ALL segments below are length 90.
+    Bottom V apex is computed so both V legs are also length 90.
+  -->
+
+  <!-- Constants used (precomputed):
+       s = 90
+       a = s*sqrt(3)/2 = 77.9422863406
+       h = s/2 = 45
+  -->
+
+  <!-- === HEX CENTERS === -->
+  <!-- Top row centers -->
+  <!-- A: (200,200), B: (355.885,200), C: (511.77,200) -->
+  <!-- Bottom row centers -->
+  <!-- D: (277.942,335), E: (433.827,335) -->
+
+  <!-- === PERIMETERS === -->
+  <!-- Each hex uses vertices (pointy-top), in order:
+       top (0,-s)
+       ur (+a,-h)
+       lr (+a,+h)
+       bot (0,+s)
+       ll (-a,+h)
+       ul (-a,-h)
+  -->
+
+  <!-- Hex A perimeter -->
+  <path class="seg" d="M 200 110 L 277.942 155 L 277.942 245 L 200 290 L 122.058 245 L 122.058 155 Z"/>
+
+  <!-- Hex B perimeter -->
+  <path class="seg" d="M 355.885 110 L 433.827 155 L 433.827 245 L 355.885 290 L 277.943 245 L 277.943 155 Z"/>
+
+  <!-- Hex C perimeter -->
+  <path class="seg" d="M 511.77 110 L 589.712 155 L 589.712 245 L 511.77 290 L 433.828 245 L 433.828 155 Z"/>
+
+  <!-- Hex D perimeter -->
+  <path class="seg" d="M 277.942 245 L 355.884 290 L 355.884 380 L 277.942 425 L 200 380 L 200 290 Z"/>
+
+  <!-- Hex E perimeter -->
+  <path class="seg" d="M 433.827 245 L 511.769 290 L 511.769 380 L 433.827 425 L 355.885 380 L 355.885 290 Z"/>
+
+  <!-- === INTERNAL Y (proper Y: two arms up, one stem down) === -->
+  <!-- For each hex, connect center to:
+       UL ( -a, -h )   [up-left]
+       UR ( +a, -h )   [up-right]
+       BOT(  0, +s )   [down stem]
+       These three spokes are length s (same as perimeter).
+  -->
+
+  <!-- Hex A Y -->
+  <path class="seg" d="M 200 200 L 122.058 155"/>
+  <path class="seg" d="M 200 200 L 277.942 155"/>
+  <path class="seg" d="M 200 200 L 200 290"/>
+
+  <!-- Hex B Y -->
+  <path class="seg" d="M 355.885 200 L 277.943 155"/>
+  <path class="seg" d="M 355.885 200 L 433.827 155"/>
+  <path class="seg" d="M 355.885 200 L 355.885 290"/>
+
+  <!-- Hex C Y -->
+  <path class="seg" d="M 511.77 200 L 433.828 155"/>
+  <path class="seg" d="M 511.77 200 L 589.712 155"/>
+  <path class="seg" d="M 511.77 200 L 511.77 290"/>
+
+  <!-- Hex D Y -->
+  <path class="seg" d="M 277.942 335 L 200 290"/>
+  <path class="seg" d="M 277.942 335 L 355.884 290"/>
+  <path class="seg" d="M 277.942 335 L 277.942 425"/>
+
+  <!-- Hex E Y -->
+  <path class="seg" d="M 433.827 335 L 355.885 290"/>
+  <path class="seg" d="M 433.827 335 L 511.769 290"/>
+  <path class="seg" d="M 433.827 335 L 433.827 425"/>
+
+  <!-- === BOTTOM V CONNECTOR (2 equal-length segments) === -->
+  <!-- Bottom vertices are:
+       D bottom = (277.942,425)
+       E bottom = (433.827,425)
+     Distance between them ≈ 155.885
+     For equal legs length s=90, apex is below midpoint by:
+       sqrt(90^2 - (155.885/2)^2) ≈ 44.899
+     Apex = (355.8845, 469.899)
+  -->
+  <path class="seg" d="M 277.942 425 L 355.8845 469.899"/>
+  <path class="seg" d="M 433.827 425 L 355.8845 469.899"/>
+
+  <!-- === HUBS (drawn as black nodes) === -->
+
+  <!-- Outer hubs (unique set used in the perimeters) -->
+  <circle class="hub" cx="200" cy="110" r="16"/>
+  <circle class="hub" cx="277.942" cy="155" r="16"/>
+  <circle class="hub" cx="277.942" cy="245" r="16"/>
+  <circle class="hub" cx="200" cy="290" r="16"/>
+  <circle class="hub" cx="122.058" cy="245" r="16"/>
+  <circle class="hub" cx="122.058" cy="155" r="16"/>
+
+  <circle class="hub" cx="355.885" cy="110" r="16"/>
+  <circle class="hub" cx="433.827" cy="155" r="16"/>
+  <circle class="hub" cx="433.827" cy="245" r="16"/>
+  <circle class="hub" cx="355.885" cy="290" r="16"/>
+
+  <circle class="hub" cx="511.77" cy="110" r="16"/>
+  <circle class="hub" cx="589.712" cy="155" r="16"/>
+  <circle class="hub" cx="589.712" cy="245" r="16"/>
+  <circle class="hub" cx="511.77" cy="290" r="16"/>
+
+  <circle class="hub" cx="355.884" cy="380" r="16"/>
+  <circle class="hub" cx="277.942" cy="425" r="16"/>
+  <circle class="hub" cx="200" cy="380" r="16"/>
+
+  <circle class="hub" cx="511.769" cy="380" r="16"/>
+  <circle class="hub" cx="433.827" cy="425" r="16"/>
+  <circle class="hub" cx="355.885" cy="380" r="16"/>
+
+  <!-- Internal hubs (centers / junctions) -->
+  <circle class="hub" cx="200" cy="200" r="16"/>
+  <circle class="hub" cx="355.885" cy="200" r="16"/>
+  <circle class="hub" cx="511.77" cy="200" r="16"/>
+  <circle class="hub" cx="277.942" cy="335" r="16"/>
+  <circle class="hub" cx="433.827" cy="335" r="16"/>
+
+  <!-- V apex hub -->
+  <circle class="hub" cx="355.8845" cy="469.899" r="16"/>
+</svg>
+
