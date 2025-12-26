@@ -2,42 +2,44 @@
 
 #include <stdint.h>
 
-#include "layout.h"
-
 namespace chromance {
 namespace core {
 
-struct DiagnosticStripTiming {
-  uint32_t step_ms;
+struct SegmentDiagnosticTiming {
+  uint32_t flash_on_ms;
+  uint32_t flash_off_ms;
   uint32_t latched_hold_ms;
 
-  constexpr DiagnosticStripTiming(uint32_t step_ms_, uint32_t latched_hold_ms_)
-      : step_ms(step_ms_), latched_hold_ms(latched_hold_ms_) {}
+  constexpr SegmentDiagnosticTiming(uint32_t flash_on_ms_,
+                                    uint32_t flash_off_ms_,
+                                    uint32_t latched_hold_ms_)
+      : flash_on_ms(flash_on_ms_),
+        flash_off_ms(flash_off_ms_),
+        latched_hold_ms(latched_hold_ms_) {}
 
-  constexpr DiagnosticStripTiming() : step_ms(500), latched_hold_ms(100) {}
+  constexpr SegmentDiagnosticTiming() : flash_on_ms(150), flash_off_ms(150), latched_hold_ms(100) {}
 };
 
 class DiagnosticStripStateMachine {
  public:
-  static const uint8_t kChaseRepeatCount = 5;
-
   enum class Phase : uint8_t {
-    ChaseSingleLed,
+    FlashOn,
+    FlashOff,
     LatchedOn,
+    DoneFullOn,
   };
 
   explicit DiagnosticStripStateMachine(uint16_t segment_count,
-                                       DiagnosticStripTiming timing = DiagnosticStripTiming())
+                                       SegmentDiagnosticTiming timing = SegmentDiagnosticTiming())
       : segment_count_(segment_count), timing_(timing) {
     reset(0);
   }
 
   void reset(uint32_t now_ms) {
     current_segment_ = 0;
-    chase_repeat_index_ = 0;
-    current_led_ = 0;
-    phase_ = Phase::ChaseSingleLed;
-    next_transition_ms_ = now_ms + timing_.step_ms;
+    flashes_completed_ = 0;
+    phase_ = Phase::FlashOff;
+    next_transition_ms_ = now_ms + timing_.flash_off_ms;
   }
 
   void tick(uint32_t now_ms) {
@@ -49,13 +51,28 @@ class DiagnosticStripStateMachine {
       const uint32_t transition_at = next_transition_ms_;
 
       switch (phase_) {
-        case Phase::ChaseSingleLed:
-          advance_chase_or_latch(transition_at);
+        case Phase::FlashOff:
+          if (flashes_completed_ < required_flash_count(current_segment_)) {
+            phase_ = Phase::FlashOn;
+            next_transition_ms_ = transition_at + timing_.flash_on_ms;
+          } else {
+            phase_ = Phase::LatchedOn;
+            next_transition_ms_ = transition_at + timing_.latched_hold_ms;
+          }
+          break;
+
+        case Phase::FlashOn:
+          phase_ = Phase::FlashOff;
+          ++flashes_completed_;
+          next_transition_ms_ = transition_at + timing_.flash_off_ms;
           break;
 
         case Phase::LatchedOn:
           advance_to_next_segment(transition_at);
           break;
+
+        case Phase::DoneFullOn:
+          return;
       }
     }
   }
@@ -63,17 +80,23 @@ class DiagnosticStripStateMachine {
   uint16_t segment_count() const { return segment_count_; }
   uint16_t current_segment() const { return current_segment_; }
   Phase phase() const { return phase_; }
-  uint8_t chase_repeat_index() const { return chase_repeat_index_; }
-  uint8_t current_led() const { return current_led_; }
+  uint8_t flashes_completed() const { return flashes_completed_; }
   uint32_t next_transition_ms() const { return next_transition_ms_; }
-  const DiagnosticStripTiming& timing() const { return timing_; }
+  const SegmentDiagnosticTiming& timing() const { return timing_; }
 
-  bool is_led_on(uint16_t segment_index, uint8_t led_in_segment) const {
+  bool is_done() const { return phase_ == Phase::DoneFullOn; }
+
+  uint8_t required_flash_count(uint16_t segment_index) const {
+    // Segment order is 1-based: segment 0 flashes 1 time, segment 1 flashes 2 times, etc.
+    return static_cast<uint8_t>(segment_index + 1);
+  }
+
+  bool is_segment_on(uint16_t segment_index) const {
     if (segment_index >= segment_count_) {
       return false;
     }
-    if (led_in_segment >= kLedsPerSegment) {
-      return false;
+    if (phase_ == Phase::DoneFullOn) {
+      return true;
     }
 
     if (segment_index < current_segment_) {
@@ -83,10 +106,7 @@ class DiagnosticStripStateMachine {
       return false;
     }
 
-    if (phase_ == Phase::LatchedOn) {
-      return true;
-    }
-    return led_in_segment == current_led_;
+    return phase_ == Phase::FlashOn || phase_ == Phase::LatchedOn;
   }
 
  private:
@@ -94,46 +114,25 @@ class DiagnosticStripStateMachine {
     return static_cast<int32_t>(now_ms - target_ms) >= 0;
   }
 
-  void advance_chase_or_latch(uint32_t transition_at) {
-    if (current_led_ + 1 < kLedsPerSegment) {
-      ++current_led_;
-      next_transition_ms_ = transition_at + timing_.step_ms;
-      return;
-    }
-
-    // End of segment (LED 13). Either repeat or latch the full segment ON.
-    if (chase_repeat_index_ + 1 < kChaseRepeatCount) {
-      ++chase_repeat_index_;
-      current_led_ = 0;
-      next_transition_ms_ = transition_at + timing_.step_ms;
-      return;
-    }
-
-    phase_ = Phase::LatchedOn;
-    current_led_ = 0;
-    next_transition_ms_ = transition_at + timing_.latched_hold_ms;
-  }
-
   void advance_to_next_segment(uint32_t transition_at) {
     if (current_segment_ + 1 >= segment_count_) {
-      reset(transition_at);
+      phase_ = Phase::DoneFullOn;
+      next_transition_ms_ = transition_at;
       return;
     }
 
     ++current_segment_;
-    chase_repeat_index_ = 0;
-    current_led_ = 0;
-    phase_ = Phase::ChaseSingleLed;
-    next_transition_ms_ = transition_at + timing_.step_ms;
+    flashes_completed_ = 0;
+    phase_ = Phase::FlashOff;
+    next_transition_ms_ = transition_at + timing_.flash_off_ms;
   }
 
   uint16_t segment_count_ = 0;
   uint16_t current_segment_ = 0;
-  uint8_t chase_repeat_index_ = 0;
-  uint8_t current_led_ = 0;
-  Phase phase_ = Phase::ChaseSingleLed;
+  uint8_t flashes_completed_ = 0;
+  Phase phase_ = Phase::FlashOff;
   uint32_t next_transition_ms_ = 0;
-  DiagnosticStripTiming timing_;
+  SegmentDiagnosticTiming timing_;
 };
 
 }  // namespace core

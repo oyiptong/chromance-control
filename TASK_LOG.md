@@ -1,3 +1,44 @@
+### 2025-12-26 — Diagnostic colors labeled with named constants
+
+Status: 🔵 Decision
+
+What was done:
+- Added named color constants (e.g., Red/Green/Blue/Magenta) and mapped each strip’s diagnostic color to an explicit name for readability
+
+Files referenced:
+- src/core/layout.h
+
+### 2025-12-26 — Diagnostic program updated to global prelude + ordered segment flashes
+
+Status: 🟢 Done
+
+What was done:
+- Implemented a multi-phase diagnostic sequence: initial all-off hold, all-on (per-strip color) for 5s, global flash for 10 cycles, then per-segment flashing with flash count equal to 1-based segment order and latch-on per segment
+- Added “done” handling so strips remain fully lit after completing their segments until all strips finish, then the sequence restarts from the initial all-off hold
+- Updated Unity host tests to cover segment-order flash counts, completion behavior, and high-level phase sequencing; verified `pio test -e native` and `pio run -e diagnostic` succeed
+
+Files referenced:
+- src/core/diagnostic_strip_sm.h
+- src/core/diagnostic_pattern.h
+- test/test_diagnostic_pattern.cpp
+- test/test_main.cpp
+
+Notes / Decisions:
+- Segment flash count uses 1-based order within each strip (segment 0 flashes once, segment 1 flashes twice, etc.)
+
+### 2025-12-26 — Diagnostic strip colors made explicit in layout config
+
+Status: 🔵 Decision
+
+What was done:
+- Refactored the per-strip diagnostic color assignment into named constants at the top of the layout config for easy editing
+
+Files referenced:
+- src/core/layout.h
+
+Notes / Decisions:
+- Strip numbering for color constants matches the wiring table (“Strip 1” = `kStripConfigs[0]`, …)
+
 ### 2025-12-24 — DotStar strip GPIO pin mapping updated
 
 Status: 🟢 Done
