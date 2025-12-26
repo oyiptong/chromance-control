@@ -20,17 +20,20 @@ struct StripConfig {
   Rgb diagnostic_color;
 };
 
-// Diagnostic colors (per strip). Strip numbering here matches the wiring table / documentation
-// ("Strip 1" = kStripConfigs[0], ...).
+// Diagnostic colors (per strip index). Physical strip labels are 1-based:
+// - strip index 0 = "Strip 1"
+// - strip index 1 = "Strip 2"
+// - strip index 2 = "Strip 3"
+// - strip index 3 = "Strip 4"
 constexpr Rgb kDiagnosticColorRed{255, 0, 0};
 constexpr Rgb kDiagnosticColorGreen{0, 255, 0};
 constexpr Rgb kDiagnosticColorBlue{0, 0, 255};
 constexpr Rgb kDiagnosticColorMagenta{255, 0, 255};
 
-constexpr Rgb kStrip1DiagnosticColor = kDiagnosticColorRed;          // Red
-constexpr Rgb kStrip2DiagnosticColor = kDiagnosticColorGreen;        // Green
-constexpr Rgb kStrip3DiagnosticColor = kDiagnosticColorBlue;         // Blue
-constexpr Rgb kStrip4DiagnosticColor = kDiagnosticColorMagenta;      // Magenta
+constexpr Rgb kStrip0DiagnosticColor = kDiagnosticColorRed;          // Red
+constexpr Rgb kStrip1DiagnosticColor = kDiagnosticColorGreen;        // Green
+constexpr Rgb kStrip2DiagnosticColor = kDiagnosticColorBlue;         // Blue
+constexpr Rgb kStrip3DiagnosticColor = kDiagnosticColorMagenta;      // Magenta
 
 constexpr uint8_t kStrip0Segments = 11;
 constexpr uint8_t kStrip1Segments = 12;
@@ -62,10 +65,10 @@ constexpr StripConfig kStripConfigs[kStripCount] = {
     // Strip 2: GPIO19, GPIO18
     // Strip 3: GPIO17, GPIO16
     // Strip 4: GPIO14, GPIO32
-    {kStrip0Segments, false, 23, 22, kStrip1DiagnosticColor},
-    {kStrip1Segments, false, 19, 18, kStrip2DiagnosticColor},
-    {kStrip2Segments, false, 17, 16, kStrip3DiagnosticColor},
-    {kStrip3Segments, false, 14, 32, kStrip4DiagnosticColor},
+    {kStrip0Segments, false, 23, 22, kStrip0DiagnosticColor},
+    {kStrip1Segments, false, 19, 18, kStrip1DiagnosticColor},
+    {kStrip2Segments, false, 17, 16, kStrip2DiagnosticColor},
+    {kStrip3Segments, false, 14, 32, kStrip3DiagnosticColor},
 };
 
 }  // namespace core

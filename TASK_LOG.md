@@ -1,3 +1,14 @@
+### 2025-12-26 — Diagnostic color constants renamed to 0-based strip indices
+
+Status: 🔵 Decision
+
+What was done:
+- Renamed diagnostic strip color constants to use 0-based indices (`kStrip0DiagnosticColor..kStrip3DiagnosticColor`) for consistency with `kStripConfigs[0..3]`
+- Verified `pio test -e native` and `pio run -e diagnostic` still succeed
+
+Files referenced:
+- src/core/layout.h
+
 ### 2025-12-26 — Diagnostic colors labeled with named constants
 
 Status: 🔵 Decision
