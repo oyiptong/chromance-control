@@ -347,3 +347,141 @@ Notes / Decisions:
 
 Proof-of-life:
 - `cd tools/wled_spike/wled && pio run -e chromance_spike_featheresp32`: SUCCESS (WLED build output shows `chromance_spike` usermod linked)
+
+### 2026-01-04 — Milestone 1 spike: improved Serial diagnostics (no missed boot prints)
+
+Status: 🟢 Done
+
+What was done:
+- Updated the WLED spike usermod to print `ChromanceSpike:` diagnostics every ~2s (not only at boot) to avoid “no serial lines” when the monitor attaches after startup.
+- Set `monitor_speed=115200` in the spike PlatformIO override.
+ - Added WiFi/AP status logging (`apSSID`, `ap_ip`, `sta_ip`, `WLED_CONNECTED`) so the WebUI can be located without relying on WLED debug logs.
+
+Files touched:
+- tools/wled_spike/usermods/chromance_spike/chromance_spike.cpp
+- tools/wled_spike/platformio_override.chromance_spike.ini
+- tools/wled_spike/README.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `cd tools/wled_spike/wled && pio run -e chromance_spike_featheresp32`: SUCCESS
+
+### 2026-01-04 — Milestone 1 spike: seed WLED WiFi defaults from repo secrets
+
+Status: 🟢 Done
+
+What was done:
+- Updated the spike installer to (optionally) seed WLED compile-time `CLIENT_SSID`/`CLIENT_PASS` defaults from `include/wifi_secrets.h`, so first boot can join the intended WiFi without AP provisioning.
+
+Files touched:
+- tools/wled_spike/install_into_wled.sh
+- tools/wled_spike/README.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `./tools/wled_spike/install_into_wled.sh`: PASS (WiFi defaults applied to local WLED clone)
+
+### 2026-01-04 — Milestone 1 spike: lift WLED WebUI SPI bus cap (2 → 4)
+
+Status: 🟢 Done
+
+What was done:
+- Identified that WLED’s LED Preferences WebUI hard-caps “2 pin” (SPI) busses to 2, which blocks configuring Chromance’s 4 APA102/DotStar outputs.
+- Updated the local spike installer to patch the WLED clone’s `wled00/data/settings_leds.htm` to allow up to 4 SPI busses (firmware already supports more via `BusManager`).
+
+Files touched:
+- tools/wled_spike/install_into_wled.sh
+- tools/wled_spike/README.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `./tools/wled_spike/install_into_wled.sh`: PASS (patched WebUI `twopinB >= 4`)
+
+### 2026-01-04 — Milestone 1 spike: add WLED LED Preferences config template (4× APA102)
+
+Status: 🟢 Done
+
+What was done:
+- Added a WLED “Config template” JSON file that can be applied from `Config → LED Preferences` to provision the 4 APA102/DotStar busses (pins, lengths, contiguous start indices) without manual UI entry.
+
+Files touched:
+- tools/wled_spike/chromance_led_prefs_template.json
+- tools/wled_spike/README.md
+- TASK_LOG.md
+
+Proof-of-life:
+- Template created for `type=51 (APA102)` with starts `{0,154,322,406}` and total `560`.
+
+### 2026-01-04 — Milestone 1 spike: WLED APA102 output unreliable on GPIO16/17 (board-specific)
+
+Status: 🔴 Blocked
+
+What was observed:
+- WLED is correctly configured for 4 busses (`total_len=560`, contiguous starts) but one physical strip is intermittently/non-responsive when assigned to GPIO17 (DATA) / GPIO16 (CLK).
+- The same physical strip responds when moved to another configured pin pair, suggesting a WLED/driver/pin interaction rather than mapping/generator issues (Chromance runtime firmware drives the hardware correctly).
+
+Notes / Decisions:
+- Suspected WLED limitation: only the first SPI (2-pin) bus uses HW SPI on ESP32; additional APA102 busses fall back to soft SPI, which may behave differently on some pins/boards.
+- Candidate mitigations (to validate):
+  - Reorder WLED busses so the problematic pin pair is bus0 (gets HW SPI), while keeping start indices custom.
+  - Change the pin pair for that strip in WLED (and, if Option B proceeds, update Chromance pin assignments to match).
+
+Proof-of-life:
+- Serial (WLED spike): `busses=4 total_len=560` and `idx=322 -> bus2 local=0` while the physical strip on `17/16` did not respond reliably.
+
+### 2026-01-04 — Milestone 1 spike: adopt GPIO33/27 for Strip 3 (WLED workaround)
+
+Status: 🟢 Done
+
+What was done:
+- Updated the default Strip 3 (84 LED) DotStar pin assignment from GPIO17/16 to GPIO33/27 to match verified working WLED behavior on Feather ESP32.
+- Updated the WLED spike README, usermod wiring notes, and the LED Preferences config template to match.
+
+Files touched:
+- src/core/layout.h
+- tools/wled_spike/README.md
+- tools/wled_spike/usermods/chromance_spike/chromance_spike.cpp
+- tools/wled_spike/chromance_led_prefs_template.json
+- TASK_LOG.md
+
+Proof-of-life:
+- User report: WLED works reliably with Strip 3 wired to DATA=33 / CLK=27 (GPIO17/16 unreliable).
+
+### 2026-01-04 — Milestone 1 spike: enable sparse 2D ledmap loading in WLED clone
+
+Status: 🟢 Done
+
+What was done:
+- Identified that upstream WLED’s `deserializeMap()` truncates `ledmap.json` to `LED_COUNT` entries because it allocates the mapping table to `getLengthTotal()`.
+- Added a reproducible installer patch that allocates the mapping table to `mapSize = width*height` when a 2D ledmap is used, so Chromance’s sparse `mapping/ledmap.json` can be fully loaded.
+- Set `MAX_LEDS` build flag to `20000` for the spike build to avoid 2D size limits blocking large sparse maps.
+- Updated the spike README and the LED Preferences template defaults (Strip 3 pins `33/27`, Color Order `BRG`).
+
+Files touched:
+- tools/wled_spike/install_into_wled.sh
+- tools/wled_spike/platformio_override.chromance_spike.ini
+- tools/wled_spike/README.md
+- tools/wled_spike/chromance_led_prefs_template.json
+- wled_spike_refinement_prompt.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `./tools/wled_spike/install_into_wled.sh`: prints “Patched WLED ledmap loader to support sparse 2D maps (mapSize=width*height).”
+
+### 2026-01-04 — Milestone 1 spike: move Strip 2 to GPIO17/16 (WLED-friendly)
+
+Status: 🟢 Done
+
+What was done:
+- Updated default pin assignment so the 12-segment strip (Strip 2 / bus1 / start=154 len=168) uses DATA=17 / CLK=16 instead of 19/18, per verified WLED behavior.
+- Updated the WLED spike docs/template and the Chromance core pin constants to match the new wiring.
+
+Files touched:
+- src/core/layout.h
+- tools/wled_spike/README.md
+- tools/wled_spike/usermods/chromance_spike/chromance_spike.cpp
+- tools/wled_spike/chromance_led_prefs_template.json
+- TASK_LOG.md
+
+Proof-of-life:
+- User report: moving the 12-segment strip from GPIO19/18 to GPIO17/16 made it work in WLED.

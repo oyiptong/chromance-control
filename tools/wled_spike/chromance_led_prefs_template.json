@@ -1,0 +1,71 @@
+{
+  "_comment": "Chromance Spike — WLED LED Preferences template. Loads 4 APA102/DotStar busses with contiguous start indices for the 560-LED Chromance layout. If colors look swapped, change each bus \"order\" (0=GRB, 1=RGB, 4=BGR). Set hw.led.maxpwr to your PSU limit (mA) if you want WLED brightness limiting; 0 disables it.",
+  "hw": {
+    "led": {
+      "total": 560,
+      "maxpwr": 0,
+      "ins": [
+        {
+          "start": 0,
+          "len": 154,
+          "pin": [23, 22],
+          "type": 51,
+          "order": 2,
+          "skip": 0,
+          "rev": false,
+          "ref": false,
+          "rgbwm": 255,
+          "freq": 0,
+          "ledma": 55,
+          "maxpwr": 0,
+          "text": ""
+        },
+        {
+          "start": 154,
+          "len": 168,
+          "pin": [17, 16],
+          "type": 51,
+          "order": 2,
+          "skip": 0,
+          "rev": false,
+          "ref": false,
+          "rgbwm": 255,
+          "freq": 0,
+          "ledma": 55,
+          "maxpwr": 0,
+          "text": ""
+        },
+        {
+          "start": 322,
+          "len": 84,
+          "pin": [33, 27],
+          "type": 51,
+          "order": 2,
+          "skip": 0,
+          "rev": false,
+          "ref": false,
+          "rgbwm": 255,
+          "freq": 0,
+          "ledma": 55,
+          "maxpwr": 0,
+          "text": ""
+        },
+        {
+          "start": 406,
+          "len": 154,
+          "pin": [14, 32],
+          "type": 51,
+          "order": 2,
+          "skip": 0,
+          "rev": false,
+          "ref": false,
+          "rgbwm": 255,
+          "freq": 0,
+          "ledma": 55,
+          "maxpwr": 0,
+          "text": ""
+        }
+      ]
+    }
+  }
+}

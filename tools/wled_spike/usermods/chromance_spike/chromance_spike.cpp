@@ -9,8 +9,8 @@
 //     bus0 start=0, bus1 start=154, bus2 start=322, bus3 start=406
 // - Wire pins to match Chromance:
 //     Strip1 DATA=23 CLK=22
-//     Strip2 DATA=19 CLK=18
-//     Strip3 DATA=17 CLK=16
+//     Strip2 DATA=17 CLK=16
+//     Strip3 DATA=33 CLK=27
 //     Strip4 DATA=14 CLK=32
 //
 // This usermod:
@@ -82,15 +82,43 @@ void print_bus_info() {
   }
 }
 
+void print_net_info() {
+  const wl_status_t st = WiFi.status();
+  const wifi_mode_t mode = WiFi.getMode();
+
+  Serial.printf("ChromanceSpike: wifi_mode=%u wifi_status=%u WLED_CONNECTED=%s apActive=%s apSSID=%s\n",
+                static_cast<unsigned>(mode),
+                static_cast<unsigned>(st),
+                WLED_CONNECTED ? "true" : "false",
+                apActive ? "true" : "false",
+                apSSID);
+
+  const IPAddress sta_ip = WiFi.localIP();
+  const IPAddress ap_ip = WiFi.softAPIP();
+  Serial.printf("ChromanceSpike: sta_ip=%u.%u.%u.%u ap_ip=%u.%u.%u.%u\n",
+                sta_ip[0], sta_ip[1], sta_ip[2], sta_ip[3],
+                ap_ip[0], ap_ip[1], ap_ip[2], ap_ip[3]);
+}
+
 }  // namespace
 
 class ChromanceSpikeUsermod final : public Usermod {
  public:
   void setup() override {
     print_bus_info();
+    print_net_info();
+    last_print_ms_ = millis();
   }
 
-  void loop() override {}
+  void loop() override {
+    const uint32_t now = millis();
+    if (static_cast<int32_t>(now - last_print_ms_) < 2000) {
+      return;
+    }
+    last_print_ms_ = now;
+    print_bus_info();
+    print_net_info();
+  }
 
   void handleOverlayDraw() override {
     const size_t bus_count = BusManager::getNumBusses();
@@ -108,6 +136,9 @@ class ChromanceSpikeUsermod final : public Usermod {
   }
 
   uint16_t getId() override { return USERMOD_ID_UNSPECIFIED; }
+
+ private:
+  uint32_t last_print_ms_ = 0;
 };
 
 ChromanceSpikeUsermod chromance_spike;

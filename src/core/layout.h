@@ -62,12 +62,12 @@ static_assert(kTotalLeds == 560, "total LED count mismatch");
 constexpr StripConfig kStripConfigs[kStripCount] = {
     // Pin assignment (DATA, CLOCK):
     // Strip 1: GPIO23, GPIO22
-    // Strip 2: GPIO19, GPIO18
-    // Strip 3: GPIO17, GPIO16
+    // Strip 2: GPIO17, GPIO16
+    // Strip 3: GPIO33, GPIO27
     // Strip 4: GPIO14, GPIO32
     {kStrip0Segments, false, 23, 22, kStrip0DiagnosticColor},
-    {kStrip1Segments, false, 19, 18, kStrip1DiagnosticColor},
-    {kStrip2Segments, false, 17, 16, kStrip2DiagnosticColor},
+    {kStrip1Segments, false, 17, 16, kStrip1DiagnosticColor},
+    {kStrip2Segments, false, 33, 27, kStrip2DiagnosticColor},
     {kStrip3Segments, false, 14, 32, kStrip3DiagnosticColor},
 };
 
