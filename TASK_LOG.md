@@ -170,3 +170,59 @@ Files referenced:
 Notes / Decisions:
 - Implementation has not yet started
 - All subsequent work must be logged per Task Log Update skill
+
+### 2026-01-03 — Milestone 0: wiring source-of-truth inputs created (templates)
+
+Status: 🟢 Done
+
+What was done:
+- Audited firmware sources (`src/core/layout.h`, `src/core/strip_layout.h`, `src/platform/dotstar_leds.*`) for any existing segment→strip wiring order/direction tables; none exist beyond per-strip segment counts/pins.
+- Added schema-valid placeholder wiring inputs to unblock mapping pipeline work:
+  - `mapping/wiring.json`: 4 strips, seg IDs 1..40 exactly once, default `dir: a_to_b`
+  - `mapping/wiring_bench.json`: strip1-only subset (seg 1..11), default `dir: a_to_b`
+- Added `mapping/README_wiring.md` with the segment topology key and a structured validation/correction checklist.
+
+Files touched:
+- mapping/wiring.json
+- mapping/wiring_bench.json
+- mapping/README_wiring.md
+
+Notes / Decisions:
+- Strip segment distribution (11/12/6/11) is derived from `src/core/layout.h`; per-strip ordering and per-segment direction remain placeholders pending physical validation.
+- `scripts/generate_ledmap.py` does not yet support subset wiring for bench mode; planned per `docs/architecture/wled_integration_implementation_plan.md` (Section 6.2).
+
+Proof-of-life:
+- wiring.json: PASS (4 strips, segs=1..40)
+- wiring_bench.json: PASS (strips=1, segs=11)
+
+### 2026-01-04 — Native unit tests run (post Milestone 0 wiring templates)
+
+Status: 🟢 Done
+
+What was done:
+- Ran host/native unit tests to ensure core code still passes after adding wiring inputs and wiring README (no firmware/mapping outputs regenerated).
+
+Files touched:
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (7 test cases)
+
+### 2026-01-04 — Fixed generator collision (rounding semantics)
+
+Status: 🟢 Done
+
+What was done:
+- Fixed a deterministic coordinate collision in `scripts/generate_ledmap.py` caused by Python `round()` (ties-to-even) when sampling symmetric segments near shared vertices.
+- Updated the implementation plan to specify `round_half_away_from_zero` so the algorithm is reproducible across languages and does not silently reintroduce collisions.
+
+Files touched:
+- scripts/generate_ledmap.py
+- docs/architecture/wled_integration_implementation_plan.md
+- TASK_LOG.md
+
+Notes / Decisions:
+- This changes only raster coordinate rounding; strip/segment ordering still comes solely from `mapping/wiring.json`.
+
+Proof-of-life:
+- `python3 scripts/generate_ledmap.py --wiring mapping/wiring.json --out-ledmap /dev/null --out-pixels /dev/null`: `leds=560 width=169 height=112 holes=18368`

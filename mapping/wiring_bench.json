@@ -1,0 +1,23 @@
+{
+  "mappingVersion": "chromance-v1",
+  "isBenchSubset": true,
+  "_comment": "PLACEHOLDER TEMPLATE: bench subset uses only strip1 (firmware strip index 0) and segments 1..11. This is a strict subset and is NOT currently accepted by scripts/generate_ledmap.py until subset support is added (planned).",
+  "strips": [
+    {
+      "name": "strip1",
+      "segments": [
+        { "seg": 1, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 2, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 3, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 4, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 5, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 6, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 7, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 8, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 9, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 10, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 11, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" }
+      ]
+    }
+  ]
+}

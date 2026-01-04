@@ -859,8 +859,9 @@ Aligned to `scripts/generate_ledmap.py`:
 - For each segment endpoints `(X0,Y0)->(X1,Y1)`:
   - For `k = 0..13`:
     - `t = (k + 0.5) / 14`
-    - `x = round(X0 + t*(X1-X0))`
-    - `y = round(Y0 + t*(Y1-Y0))`
+    - `x = round_half_away_from_zero(X0 + t*(X1-X0))`
+    - `y = round_half_away_from_zero(Y0 + t*(Y1-Y0))`
+      - Important: do **not** use Python's `round()` (ties-to-even), as it can cause coordinate collisions for symmetric segments near shared vertices.
   - Reverse samples if `dir == b_to_a`.
 - Concatenate samples in the strip/segment order from `mapping/wiring.json` to form LED indices `0..(N-1)` (full sculpture: `N=560`).
 

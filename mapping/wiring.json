@@ -1,0 +1,67 @@
+{
+  "mappingVersion": "chromance-v1",
+  "isBenchSubset": false,
+  "_comment": "PLACEHOLDER TEMPLATE: wiring order/direction is not fully derivable from current firmware sources. Segment distribution across strips (11/12/6/11) is DERIVED from src/core/layout.h; per-strip segment order and per-segment direction require physical validation.",
+  "strips": [
+    {
+      "name": "strip1",
+      "segments": [
+        { "seg": 1, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 2, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 3, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 4, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 5, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 6, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 7, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 8, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 9, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 10, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 11, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" }
+      ]
+    },
+    {
+      "name": "strip2",
+      "segments": [
+        { "seg": 12, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 13, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 14, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 15, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 16, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 17, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 18, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 19, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 20, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 21, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 22, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 23, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" }
+      ]
+    },
+    {
+      "name": "strip3",
+      "segments": [
+        { "seg": 24, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 25, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 26, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 27, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 28, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 29, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" }
+      ]
+    },
+    {
+      "name": "strip4",
+      "segments": [
+        { "seg": 30, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 31, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 32, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 33, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 34, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 35, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 36, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 37, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 38, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 39, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" },
+        { "seg": 40, "dir": "a_to_b", "_comment": "CONFIDENCE: PLACEHOLDER - requires physical validation" }
+      ]
+    }
+  ]
+}

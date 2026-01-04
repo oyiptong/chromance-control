@@ -87,6 +87,12 @@ def vertex_to_raster(vx: int, vy: int) -> Tuple[int, int]:
     # Default deterministic projection (see docs/architecture/wled_integration_preplan.md).
     return (28 * vx, 14 * vy)
 
+def round_half_away_from_zero(v: float) -> int:
+    # Python's built-in round() uses bankers rounding (ties-to-even), which can
+    # produce collisions for symmetric segments near shared vertices (e.g. 13.5
+    # and 14.5 both round to 14). We want deterministic "mathy" rounding.
+    return int(math.floor(v + 0.5)) if v >= 0 else int(math.ceil(v - 0.5))
+
 
 def sample_segment_pixels(p0: Tuple[int, int], p1: Tuple[int, int]) -> List[Tuple[int, int]]:
     x0, y0 = p0
@@ -94,8 +100,8 @@ def sample_segment_pixels(p0: Tuple[int, int], p1: Tuple[int, int]) -> List[Tupl
     out: List[Tuple[int, int]] = []
     for k in range(LEDS_PER_SEGMENT):
         t = (k + 0.5) / LEDS_PER_SEGMENT
-        x = int(round(x0 + t * (x1 - x0)))
-        y = int(round(y0 + t * (y1 - y0)))
+        x = round_half_away_from_zero(x0 + t * (x1 - x0))
+        y = round_half_away_from_zero(y0 + t * (y1 - y0))
         out.append((x, y))
     return out
 
@@ -193,4 +199,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
