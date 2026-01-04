@@ -4,5 +4,6 @@ include/wifi_secrets.h
 include/generated
 mapping/ledmap_bench.json
 mapping/pixels_bench.json
+tools/wled_spike/wled
 __pycache__
 *.pyc

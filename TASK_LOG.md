@@ -321,3 +321,29 @@ Files touched:
 Proof-of-life:
 - `python3 scripts/generate_ledmap.py --wiring mapping/wiring.json --out-ledmap mapping/ledmap.json --out-pixels mapping/pixels.json`: `leds=560 width=169 height=112 holes=18368`
 - `python3 scripts/generate_ledmap.py --wiring mapping/wiring_bench.json --out-ledmap mapping/ledmap_bench.json --out-pixels mapping/pixels_bench.json`: `leds=154 width=56 height=98 holes=5334`
+
+### 2026-01-04 — Milestone 1 started: WLED feasibility spike scaffolded
+
+Status: 🟡 In progress
+
+What was done:
+- Created a local WLED spike harness (`tools/wled_spike/`) including:
+  - a WLED PlatformIO override env for `featheresp32`
+  - a small WLED usermod that prints multi-bus start/len to Serial and overlays bus boundary markers for visual verification
+  - install instructions + installer script
+- Built upstream WLED with the spike env (build-only; device flashing + UI configuration still pending).
+
+Files touched:
+- tools/wled_spike/README.md
+- tools/wled_spike/install_into_wled.sh
+- tools/wled_spike/platformio_override.chromance_spike.ini
+- tools/wled_spike/usermods/chromance_spike/library.json
+- tools/wled_spike/usermods/chromance_spike/chromance_spike.cpp
+- .gitignore
+- TASK_LOG.md
+
+Notes / Decisions:
+- The local WLED clone used for the spike is intentionally gitignored (`tools/wled_spike/wled`).
+
+Proof-of-life:
+- `cd tools/wled_spike/wled && pio run -e chromance_spike_featheresp32`: SUCCESS (WLED build output shows `chromance_spike` usermod linked)
