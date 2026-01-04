@@ -226,3 +226,61 @@ Notes / Decisions:
 
 Proof-of-life:
 - `python3 scripts/generate_ledmap.py --wiring mapping/wiring.json --out-ledmap /dev/null --out-pixels /dev/null`: `leds=560 width=169 height=112 holes=18368`
+
+### 2026-01-04 — Runtime mapping validation patterns added (physical verification helpers)
+
+Status: 🟢 Done
+
+What was done:
+- Implemented the planned on-device mapping validation patterns as a dedicated runtime firmware:
+  - `Index_Walk_Test`, `XY_Scan_Test`, `Coord_Color_Test`
+- Added generator support needed for firmware mapping tables:
+  - bench subset support via `isBenchSubset: true`
+  - C++ header emission (`--out-header`) for `include/generated/chromance_mapping_{full,bench}.h`
+- Added a `runtime` and `runtime_bench` PlatformIO env and a pre-build hook to generate headers from `mapping/wiring*.json` into `include/generated/` (ignored by git).
+
+Files touched:
+- scripts/generate_ledmap.py
+- scripts/generate_mapping_headers.py
+- src/main_runtime.cpp
+- src/core/mapping/mapping_tables.h
+- src/core/mapping/pixels_map.h
+- src/core/effects/effect.h
+- src/core/effects/pattern_index_walk.h
+- src/core/effects/pattern_xy_scan.h
+- src/core/effects/pattern_coord_color.h
+- src/platform/led/led_output.h
+- src/platform/led/dotstar_output.h
+- src/platform/led/dotstar_output.cpp
+- platformio.ini
+- mapping/README_wiring.md
+- docs/architecture/wled_integration_implementation_plan.md
+- .gitignore
+- TASK_LOG.md
+
+Notes / Decisions:
+- `include/generated/` is treated as generated output and is not hand-edited; it is produced from `mapping/wiring*.json` by the pre-build hook.
+
+Proof-of-life:
+- `pio test -e native`: PASSED (7 test cases)
+- `pio run -e runtime`: SUCCESS
+- `pio run -e runtime_bench`: SUCCESS
+
+### 2026-01-04 — Index walk serial banner + per-segment local reversal
+
+Status: 🟢 Done
+
+What was done:
+- Made `global_to_local[]` respect per-segment direction (`dir`) by reversing strip-local indices within a segment when `dir == b_to_a` so physical LED order matches the mapping direction.
+- Extended generated headers with per-LED `global_to_seg[]`, `global_to_seg_k[]`, and `global_to_dir[]` to aid physical note-taking.
+- Added a throttled Serial “banner” during `Index_Walk_Test` that prints `i/seg/k/dir/strip/local/...` as the lit LED advances.
+
+Files touched:
+- scripts/generate_ledmap.py
+- src/core/mapping/mapping_tables.h
+- src/main_runtime.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio run -e runtime`: SUCCESS
+- `pio run -e runtime_bench`: SUCCESS

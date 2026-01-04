@@ -55,7 +55,7 @@ This milestone is a prerequisite for mapping generation, bench mode, and any WLE
   - is explicitly a subset (documents which segments are present) and does not pretend to be the full sculpture wiring
 - Generator can run successfully using the canonical wiring file(s):
   - full: `python3 scripts/generate_ledmap.py --wiring mapping/wiring.json ...`
-  - bench (if subset): requires planned subset support in `scripts/generate_ledmap.py` (see section 5.0b)
+  - bench (if subset): supported when `mapping/wiring_bench.json` sets `isBenchSubset: true`
 
 **Risks / mitigations**
 - Risk: wiring order/direction is not yet fully confirmed.

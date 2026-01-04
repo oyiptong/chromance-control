@@ -82,6 +82,13 @@ class SegmentRef:
     seg: int  # 1..40
     direction: str  # "a_to_b" or "b_to_a"
 
+@dataclass(frozen=True)
+class OrderedSegment:
+    seg: int  # 1..40
+    direction: str  # "a_to_b" or "b_to_a"
+    strip_index: int  # 0-based, per wiring file order
+    segment_index_in_strip: int  # 0-based, per wiring file order
+
 
 def vertex_to_raster(vx: int, vy: int) -> Tuple[int, int]:
     # Default deterministic projection (see docs/architecture/wled_integration_preplan.md).
@@ -106,47 +113,60 @@ def sample_segment_pixels(p0: Tuple[int, int], p1: Tuple[int, int]) -> List[Tupl
     return out
 
 
-def parse_wiring(path: Path) -> List[SegmentRef]:
+def parse_wiring(path: Path) -> Tuple[str, bool, List[OrderedSegment]]:
     data = json.loads(path.read_text())
+    mapping_version = str(data.get("mappingVersion", ""))
+    is_bench_subset = bool(data.get("isBenchSubset", False))
     strips = data.get("strips")
     if not isinstance(strips, list) or not strips:
         raise ValueError("wiring JSON must contain non-empty 'strips' list")
 
-    ordered: List[SegmentRef] = []
-    for strip in strips:
+    ordered: List[OrderedSegment] = []
+    for strip_index, strip in enumerate(strips):
         segs = strip.get("segments")
         if not isinstance(segs, list) or not segs:
             raise ValueError("each strip must contain non-empty 'segments' list")
-        for s in segs:
+        for segment_index_in_strip, s in enumerate(segs):
             seg = int(s["seg"])
             direction = str(s["dir"])
             if seg < 1 or seg > len(SEGMENTS):
                 raise ValueError(f"segment id out of range: {seg}")
             if direction not in ("a_to_b", "b_to_a"):
                 raise ValueError(f"invalid dir for seg {seg}: {direction}")
-            ordered.append(SegmentRef(seg=seg, direction=direction))
+            ordered.append(
+                OrderedSegment(
+                    seg=seg,
+                    direction=direction,
+                    strip_index=strip_index,
+                    segment_index_in_strip=segment_index_in_strip,
+                )
+            )
 
-    used = [sr.seg for sr in ordered]
-    if len(set(used)) != len(SEGMENTS):
-        missing = sorted(set(range(1, len(SEGMENTS) + 1)) - set(used))
+    used = [os.seg for os in ordered]
+    if len(set(used)) != len(used):
         dupes = sorted({s for s in used if used.count(s) > 1})
-        raise ValueError(f"wiring must reference each segment exactly once; missing={missing} dupes={dupes}")
+        raise ValueError(f"wiring contains duplicate segment ids: dupes={dupes}")
+    if not is_bench_subset:
+        if len(set(used)) != len(SEGMENTS):
+            missing = sorted(set(range(1, len(SEGMENTS) + 1)) - set(used))
+            raise ValueError(f"wiring must reference each segment exactly once; missing={missing}")
+    else:
+        if not used:
+            raise ValueError("bench wiring must reference at least one segment")
 
-    return ordered
+    return mapping_version, is_bench_subset, ordered
 
 
-def build_pixels(ordered: Sequence[SegmentRef]) -> List[Tuple[int, int]]:
+def build_pixels(ordered: Sequence[OrderedSegment]) -> List[Tuple[int, int]]:
     pixels: List[Tuple[int, int]] = []
-    for sr in ordered:
-        (va, vb) = SEGMENTS[sr.seg - 1]
+    for os in ordered:
+        (va, vb) = SEGMENTS[os.seg - 1]
         a = vertex_to_raster(*va)
         b = vertex_to_raster(*vb)
         pts = sample_segment_pixels(a, b)
-        if sr.direction == "b_to_a":
+        if os.direction == "b_to_a":
             pts.reverse()
         pixels.extend(pts)
-    if len(pixels) != len(SEGMENTS) * LEDS_PER_SEGMENT:
-        raise AssertionError("pixel count mismatch")
     return pixels
 
 
@@ -155,16 +175,130 @@ def compute_bounds(pixels: Sequence[Tuple[int, int]]) -> Tuple[int, int, int, in
     ys = [p[1] for p in pixels]
     return min(xs), min(ys), max(xs), max(ys)
 
+def build_global_to_strip_tables(ordered: Sequence[OrderedSegment]) -> Tuple[List[int], List[int]]:
+    global_to_strip: List[int] = []
+    global_to_local: List[int] = []
+    for os in ordered:
+        base = os.segment_index_in_strip * LEDS_PER_SEGMENT
+        for k in range(LEDS_PER_SEGMENT):
+            global_to_strip.append(os.strip_index)
+            if os.direction == "a_to_b":
+                global_to_local.append(base + k)
+            else:
+                global_to_local.append(base + (LEDS_PER_SEGMENT - 1 - k))
+    return global_to_strip, global_to_local
+
+def build_global_to_segment_tables(
+    ordered: Sequence[OrderedSegment],
+) -> Tuple[List[int], List[int], List[int]]:
+    global_to_seg: List[int] = []
+    global_to_seg_k: List[int] = []
+    global_to_dir: List[int] = []
+    for os in ordered:
+        for k in range(LEDS_PER_SEGMENT):
+            global_to_seg.append(os.seg)
+            global_to_seg_k.append(k)
+            global_to_dir.append(0 if os.direction == "a_to_b" else 1)
+    return global_to_seg, global_to_seg_k, global_to_dir
+
+def write_mapping_header(
+    *,
+    out_path: Path,
+    mapping_version: str,
+    is_bench_subset: bool,
+    width: int,
+    height: int,
+    pixel_x: Sequence[int],
+    pixel_y: Sequence[int],
+    global_to_strip: Sequence[int],
+    global_to_local: Sequence[int],
+    global_to_seg: Sequence[int],
+    global_to_seg_k: Sequence[int],
+    global_to_dir: Sequence[int],
+) -> None:
+    if len(pixel_x) != len(pixel_y):
+        raise ValueError("pixel_x/pixel_y length mismatch")
+    if len(global_to_strip) != len(pixel_x) or len(global_to_local) != len(pixel_x):
+        raise ValueError("global_to_* length mismatch")
+    if (
+        len(global_to_seg) != len(pixel_x)
+        or len(global_to_seg_k) != len(pixel_x)
+        or len(global_to_dir) != len(pixel_x)
+    ):
+        raise ValueError("global_to_seg/global_to_seg_k/global_to_dir length mismatch")
+
+    led_count = len(pixel_x)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def format_values(values: Sequence[int], *, per_line: int) -> str:
+        lines: List[str] = []
+        for i in range(0, len(values), per_line):
+            chunk = ", ".join(str(int(v)) for v in values[i : i + per_line])
+            suffix = "," if i + per_line < len(values) else ""
+            lines.append(f"  {chunk}{suffix}")
+        return "\n".join(lines)
+
+    def arr_int16(name: str, values: Sequence[int]) -> str:
+        body = format_values(values, per_line=16)
+        return f"constexpr int16_t {name}[LED_COUNT] = {{\n{body}\n}};"
+
+    def arr_u8(name: str, values: Sequence[int]) -> str:
+        body = format_values(values, per_line=24)
+        return f"constexpr uint8_t {name}[LED_COUNT] = {{\n{body}\n}};"
+
+    def arr_u16(name: str, values: Sequence[int]) -> str:
+        body = format_values(values, per_line=16)
+        return f"constexpr uint16_t {name}[LED_COUNT] = {{\n{body}\n}};"
+
+    header = "\n".join(
+        [
+            "#pragma once",
+            "",
+            "#include <stdint.h>",
+            "",
+            "// AUTOGENERATED FILE — do not hand-edit.",
+            "// Generated by: scripts/generate_ledmap.py",
+            "",
+            "namespace chromance {",
+            "namespace mapping {",
+            "",
+            f'constexpr const char* MAPPING_VERSION = "{mapping_version}";',
+            f"constexpr bool IS_BENCH_SUBSET = {'true' if is_bench_subset else 'false'};",
+            f"constexpr uint16_t LED_COUNT = {led_count};",
+            f"constexpr uint16_t WIDTH = {int(width)};",
+            f"constexpr uint16_t HEIGHT = {int(height)};",
+            "",
+            arr_int16("pixel_x", pixel_x),
+            arr_int16("pixel_y", pixel_y),
+            arr_u8("global_to_strip", global_to_strip),
+            arr_u16("global_to_local", global_to_local),
+            arr_u8("global_to_seg", global_to_seg),
+            arr_u8("global_to_seg_k", global_to_seg_k),
+            arr_u8("global_to_dir", global_to_dir),
+            "",
+            "}  // namespace mapping",
+            "}  // namespace chromance",
+            "",
+        ]
+    )
+    out_path.write_text(header)
+
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--wiring", required=True, type=Path, help="Path to wiring.json (strip order + per-seg direction)")
     ap.add_argument("--out-ledmap", required=True, type=Path, help="Output ledmap.json path")
     ap.add_argument("--out-pixels", type=Path, help="Optional output pixels.json path")
+    ap.add_argument("--out-header", type=Path, help="Optional output C++ header (include/generated/*.h)")
     args = ap.parse_args()
 
-    ordered = parse_wiring(args.wiring)
+    mapping_version, is_bench_subset, ordered = parse_wiring(args.wiring)
     pixels = build_pixels(ordered)
+    global_to_strip, global_to_local = build_global_to_strip_tables(ordered)
+    global_to_seg, global_to_seg_k, global_to_dir = build_global_to_segment_tables(ordered)
+
+    if len(pixels) != len(global_to_strip):
+        raise AssertionError("pixel/global_to_* count mismatch")
 
     min_x, min_y, max_x, max_y = compute_bounds(pixels)
     width = max_x - min_x + 1
@@ -187,11 +321,29 @@ def main() -> int:
     if args.out_pixels is not None:
         args.out_pixels.parent.mkdir(parents=True, exist_ok=True)
         payload = {
+            "mappingVersion": mapping_version,
+            "isBenchSubset": is_bench_subset,
             "width": width,
             "height": height,
             "pixels": [{"i": i, "x": x - min_x, "y": y - min_y} for i, (x, y) in enumerate(pixels)],
         }
         args.out_pixels.write_text(json.dumps(payload, indent=2))
+
+    if args.out_header is not None:
+        write_mapping_header(
+            out_path=args.out_header,
+            mapping_version=mapping_version,
+            is_bench_subset=is_bench_subset,
+            width=width,
+            height=height,
+            pixel_x=[x - min_x for (x, _y) in pixels],
+            pixel_y=[y - min_y for (_x, y) in pixels],
+            global_to_strip=global_to_strip,
+            global_to_local=global_to_local,
+            global_to_seg=global_to_seg,
+            global_to_seg_k=global_to_seg_k,
+            global_to_dir=global_to_dir,
+        )
 
     print(f"leds={len(pixels)} width={width} height={height} holes={width*height-len(pixels)}")
     return 0

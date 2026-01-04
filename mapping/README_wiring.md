@@ -92,8 +92,10 @@ Expect:
 
 ### C) Generator run (bench wiring)
 
-Planned enhancement:
-- `scripts/generate_ledmap.py` currently requires all 40 segments; it must be updated to support subset wiring for bench mode (see `docs/architecture/wled_integration_implementation_plan.md`, Section 6.2).
+Bench subset generation is supported when `mapping/wiring_bench.json` sets `isBenchSubset: true`.
+
+Run:
+- `python3 scripts/generate_ledmap.py --wiring mapping/wiring_bench.json --out-ledmap mapping/ledmap_bench.json --out-pixels mapping/pixels_bench.json`
 
 ### D) Physical validation (later; requires hardware + a known test)
 
