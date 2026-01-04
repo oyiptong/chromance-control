@@ -3,7 +3,7 @@
 This folder contains the **authoritative** wiring inputs for the mapping generator (`scripts/generate_ledmap.py`).
 
 Important:
-- `mapping/wiring.json` is currently a **PLACEHOLDER template**: strip segment counts are derived from firmware, but per-strip segment order and per-segment direction are not yet derivable from repo sources and must be validated on the physical sculpture.
+- `mapping/wiring.json` is the canonical wiring source-of-truth for mapping generation.
 - Generated artifacts (`mapping/ledmap.json`, `mapping/pixels.json`, `include/generated/*.h`) must never be hand-edited; change `mapping/wiring*.json` and/or the generator instead.
 
 ## Topology key (segment ID → vertex endpoints)
@@ -57,15 +57,9 @@ Direction semantics:
 | 39 | (5,4) | (6,3) |
 | 40 | (6,1) | (6,3) |
 
-## Current wiring template status
+## Current wiring status
 
-Because the current firmware only encodes per-strip segment counts/pins (not which topology segments are physically chained, nor direction), `mapping/wiring.json` and `mapping/wiring_bench.json` are placeholders using this default distribution:
-- strip1: seg 1..11
-- strip2: seg 12..23
-- strip3: seg 24..29
-- strip4: seg 30..40
-
-All segments default to `dir: "a_to_b"` and must be corrected after physical validation.
+`mapping/wiring.json` and `mapping/wiring_bench.json` are expected to be updated as physical verification progresses; segment-level `_comment` fields record confidence.
 
 ## Validation + correction checklist
 

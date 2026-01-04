@@ -1,4 +1,6 @@
 {
+  "mappingVersion": "chromance-v1",
+  "isBenchSubset": false,
   "width": 169,
   "height": 112,
   "pixels": [

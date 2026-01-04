@@ -284,3 +284,40 @@ Files touched:
 Proof-of-life:
 - `pio run -e runtime`: SUCCESS
 - `pio run -e runtime_bench`: SUCCESS
+
+### 2026-01-04 — Bench wiring comment updated after subset support
+
+Status: 🟢 Done
+
+What was done:
+- Updated `mapping/wiring_bench.json` top-level `_comment` to reflect that subset generation is now supported when `isBenchSubset=true`.
+
+Files touched:
+- mapping/wiring_bench.json
+- TASK_LOG.md
+
+Proof-of-life:
+- `python3 scripts/generate_ledmap.py --wiring mapping/wiring_bench.json --out-ledmap /dev/null --out-pixels /dev/null`: `leds=154 width=56 height=98 holes=5334`
+
+### 2026-01-04 — Milestone 0 complete: wiring marked verified + artifacts regenerated
+
+Status: 🟢 Done
+
+What was done:
+- Updated `mapping/wiring.json` and `mapping/wiring_bench.json` confidence markers from PLACEHOLDER → DERIVED per on-device verification report.
+- Updated `mapping/README_wiring.md` to remove “placeholder template” wording now that wiring is considered canonical.
+- Regenerated mapping artifacts from the verified wiring inputs.
+
+Files touched:
+- mapping/wiring.json
+- mapping/wiring_bench.json
+- mapping/README_wiring.md
+- mapping/ledmap.json
+- mapping/pixels.json
+- mapping/ledmap_bench.json
+- mapping/pixels_bench.json
+- TASK_LOG.md
+
+Proof-of-life:
+- `python3 scripts/generate_ledmap.py --wiring mapping/wiring.json --out-ledmap mapping/ledmap.json --out-pixels mapping/pixels.json`: `leds=560 width=169 height=112 holes=18368`
+- `python3 scripts/generate_ledmap.py --wiring mapping/wiring_bench.json --out-ledmap mapping/ledmap_bench.json --out-pixels mapping/pixels_bench.json`: `leds=154 width=56 height=98 holes=5334`
