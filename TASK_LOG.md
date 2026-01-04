@@ -485,3 +485,21 @@ Files touched:
 
 Proof-of-life:
 - User report: moving the 12-segment strip from GPIO19/18 to GPIO17/16 made it work in WLED.
+
+### 2026-01-04 — Milestone 1 spike: bus1 (154–322 / 168 LEDs / 12 segments) fixed by moving pins 19/18 → 17/16; regression test passed
+
+Status: 🟢 Done
+
+What was observed:
+- Under WLED, the 168-LED strip (bus1 index range 154..322; 12 physical segments) was dark for all colors when configured on GPIO19 (DATA) / GPIO18 (CLK).
+- Moving bus1 to GPIO17 (DATA) / GPIO16 (CLK) restored full output; Solid R/G/B confirmed.
+- Updated runtime firmware pin mapping to match; runtime still drives all strips correctly.
+- WLED 4-segment regression test now passes:
+  - 0–154 = Red
+  - 154–322 = Green
+  - 322–406 = Blue
+  - 406–560 = White
+
+Notes / Decisions:
+- Treat GPIO19/18 as a known-bad APA102 pin pair for WLED soft-SPI on Feather ESP32 in this setup.
+- Prior suspicion that GPIO17/16 was unreliable was likely a misdiagnosis.

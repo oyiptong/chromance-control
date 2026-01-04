@@ -56,11 +56,23 @@ void print_bus_info() {
     if (bus == nullptr) continue;
     const uint16_t start = bus->getStart();
     const uint16_t len = bus->getLength();
-    Serial.printf("  bus%u: start=%u len=%u pins=%u\n",
-                  static_cast<unsigned>(i),
-                  start,
-                  len,
-                  static_cast<unsigned>(bus->getPins()));
+    uint8_t pins[5] = {0, 0, 0, 0, 0};
+    const size_t pin_count = bus->getPins(pins);
+    if (pin_count >= 2) {
+      Serial.printf("  bus%u: start=%u len=%u pins=%u data=%u clk=%u\n",
+                    static_cast<unsigned>(i),
+                    start,
+                    len,
+                    static_cast<unsigned>(pin_count),
+                    static_cast<unsigned>(pins[0]),
+                    static_cast<unsigned>(pins[1]));
+    } else {
+      Serial.printf("  bus%u: start=%u len=%u pins=%u\n",
+                    static_cast<unsigned>(i),
+                    start,
+                    len,
+                    static_cast<unsigned>(pin_count));
+    }
     if (start != expected_next) contiguous = false;
     expected_next = static_cast<uint16_t>(start + len);
   }

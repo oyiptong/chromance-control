@@ -46,6 +46,9 @@ WiFi credentials (optional):
   - Strip3 DATA=33 CLK=27
   - Strip4 DATA=14 CLK=32
 
+Pin note (Feather ESP32, this setup):
+- WLED APA102 bus1 (the 168-LED / 12-segment strip) did not drive reliably on GPIO19/18 but works on GPIO17/16; treat GPIO19/18 as known-bad for WLED APA102 here.
+
 Optional: apply a pre-made LED Preferences template (faster than clicking):
 - In WLED: `Config → LED Preferences`
 - Under “Config template”, choose `tools/wled_spike/chromance_led_prefs_template.json` and click “Apply”
