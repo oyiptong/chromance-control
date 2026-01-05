@@ -671,3 +671,23 @@ Files touched:
 Proof-of-life:
 - `pio test -e native`: PASSED (29 test cases)
 - `pio run -e runtime`: SUCCESS
+
+### 2026-01-05 — Milestone 4: output layer refactor (active strips, per-strip API, perf)
+
+Status: 🟡 In progress
+
+What was done:
+- Refactored `DotstarOutput` to:
+  - compute active strip lengths from `MappingTables` (bench builds only allocate/drive the strips used by the mapping)
+  - set DotStar global brightness to 255 (effect output scaling owns brightness)
+  - add an optional per-strip output API (`ILedOutput::show_strips`) for future non-global-buffer paths
+
+Files touched:
+- src/platform/led/led_output.h
+- src/platform/led/dotstar_output.h
+- src/platform/led/dotstar_output.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio run -e runtime`: SUCCESS
+- `pio run -e runtime_bench`: SUCCESS
