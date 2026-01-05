@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #include "core/effects/pattern_coord_color.h"
+#include "core/effects/pattern_breathing_mode.h"
 #include "core/effects/pattern_hrv_hexagon.h"
 #include "core/effects/pattern_index_walk.h"
 #include "core/effects/pattern_rainbow_pulse.h"
@@ -14,6 +15,7 @@
 #include "core/mapping/pixels_map.h"
 
 using chromance::core::CoordColorEffect;
+using chromance::core::BreathingEffect;
 using chromance::core::EffectFrame;
 using chromance::core::HrvHexagonEffect;
 using chromance::core::IndexWalkEffect;
@@ -350,4 +352,61 @@ void test_strip_segment_stepper_auto_advance_can_be_disabled() {
   frame.now_ms = 100;
   e.render(frame, map, out.data(), out.size());
   TEST_ASSERT_EQUAL_UINT8(3, e.segment_number());  // frozen
+}
+
+void test_breathing_effect_has_expected_phases() {
+  BreathingEffect e;
+  PixelsMap map;
+  std::vector<Rgb> out(map.led_count());
+  EffectFrame frame;
+  frame.params.brightness = 255;
+
+  e.reset(0);
+
+  // Inhale mid: inward wave should light many pixels.
+  frame.now_ms = 2000;
+  e.render(frame, map, out.data(), out.size());
+  size_t lit = 0;
+  for (const auto& c : out) lit += (c.r || c.g || c.b) ? 1 : 0;
+  TEST_ASSERT_TRUE(lit > 20);
+
+  // Exhale mid: outward dot should light a single pixel.
+  frame.now_ms = 4000 + 3000 + 3500;
+  e.render(frame, map, out.data(), out.size());
+  lit = 0;
+  for (const auto& c : out) lit += (c.r || c.g || c.b) ? 1 : 0;
+  TEST_ASSERT_EQUAL_UINT32(1, lit);
+}
+
+void test_breathing_effect_manual_phase_selection() {
+  BreathingEffect e;
+  PixelsMap map;
+  std::vector<Rgb> out(map.led_count());
+  EffectFrame frame;
+  frame.params.brightness = 255;
+
+  e.reset(0);
+  TEST_ASSERT_FALSE(e.manual_enabled());
+
+  // Force exhale phase (dot outward): should still be a single pixel.
+  e.set_manual_phase(2, 0);
+  TEST_ASSERT_TRUE(e.manual_enabled());
+  TEST_ASSERT_EQUAL_UINT8(2, e.manual_phase());
+  frame.now_ms = 100;
+  e.render(frame, map, out.data(), out.size());
+  size_t lit = 0;
+  for (const auto& c : out) lit += (c.r || c.g || c.b) ? 1 : 0;
+  TEST_ASSERT_EQUAL_UINT32(1, lit);
+
+  // Previous phase (pause 1): pick a time within the beat to ensure it lights.
+  e.prev_phase(0);
+  TEST_ASSERT_EQUAL_UINT8(1, e.manual_phase());
+  frame.now_ms = 50;
+  e.render(frame, map, out.data(), out.size());
+  lit = 0;
+  for (const auto& c : out) lit += (c.r || c.g || c.b) ? 1 : 0;
+  TEST_ASSERT_TRUE(lit > 0);
+
+  e.set_auto(0);
+  TEST_ASSERT_FALSE(e.manual_enabled());
 }

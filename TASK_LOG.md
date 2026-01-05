@@ -881,6 +881,79 @@ Proof-of-life:
 - `pio run -e runtime`: SUCCESS
 - `pio run -e runtime_bench`: SUCCESS
 
+### 2026-01-05 — Runtime: add mode 7 “Breathing”
+
+Status: 🟢 Done
+
+What was done:
+- Added runtime mode `7` (“Breathing”) with a 4-phase loop:
+  - inhale (4s): single red/orange dots travel inward along 6 spokes, one-by-one
+  - pause (3s): 60bpm heartbeat pulse; color shifts inhale→exhale
+  - exhale (7s): outward sinusoidal gradient along 6 spokes (cyan/light-green hues)
+  - pause (3s): 60bpm pulse; color shifts exhale→inhale
+- Extended persisted mode range to include `7`.
+- Mode `7` runs at ~60fps for smoother motion.
+- Added a basic native unit test to sanity-check inhale/exhale phases.
+
+Files touched:
+- src/core/effects/pattern_breathing_mode.h
+- src/core/effects/pattern_breathing_mode.cpp
+- src/core/settings/mode_setting.h
+- src/main_runtime.cpp
+- test/test_effect_patterns.cpp
+- test/test_main.cpp
+- test/test_mode_setting.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (39 test cases)
+- `pio run -e runtime`: SUCCESS
+- `pio run -e runtime_bench`: SUCCESS
+
+### 2026-01-05 — Runtime: adjust mode 7 breathing pacing + swap inhale/exhale visuals
+
+Status: 🟢 Done
+
+What was done:
+- Slowed the heartbeat pulse in breathing pauses to ~30bpm (`2s` period).
+- Swapped inhale/exhale visuals (with direction reversal):
+  - inhale now uses the wave effect reversed inward (warm orange gradient)
+  - exhale now uses the dot effect reversed outward (greenish)
+
+Files touched:
+- src/core/effects/pattern_breathing_mode.h
+- src/core/effects/pattern_breathing_mode.cpp
+- test/test_effect_patterns.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (39 test cases)
+- `pio run -e runtime`: SUCCESS
+- `pio run -e runtime_bench`: SUCCESS
+
+### 2026-01-05 — Runtime: mode 7 manual phase stepping (n / N) + ESC auto reset
+
+Status: 🟢 Done
+
+What was done:
+- Added manual phase control for breathing mode:
+  - `n`: advance to next phase (inhale → pause1 → exhale → pause2) and stay in that phase
+  - `N`: go to previous phase and stay in that phase
+  - `ESC`: exit manual mode and return to auto cycling (restarts the cycle)
+- Added native unit test for manual phase selection.
+
+Files touched:
+- src/core/effects/pattern_breathing_mode.h
+- src/main_runtime.cpp
+- test/test_effect_patterns.cpp
+- test/test_main.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (40 test cases)
+- `pio run -e runtime`: SUCCESS
+- `pio run -e runtime_bench`: SUCCESS
+
 ### 2026-01-05 — Runtime: mode 5 “Seven_Comets” (was Two_Comets)
 
 Status: 🟢 Done

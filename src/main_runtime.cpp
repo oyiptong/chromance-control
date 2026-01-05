@@ -2,6 +2,7 @@
 
 #include "core/brightness.h"
 #include "core/brightness_config.h"
+#include "core/effects/pattern_breathing_mode.h"
 #include "core/effects/pattern_coord_color.h"
 #include "core/effects/pattern_hrv_hexagon.h"
 #include "core/effects/pattern_index_walk.h"
@@ -40,6 +41,7 @@ chromance::core::CoordColorEffect coord_color;
 chromance::core::RainbowPulseEffect rainbow_pulse{700, 2000, 700};
 chromance::core::TwoDotsEffect two_dots{25};
 chromance::core::HrvHexagonEffect hrv_hexagon;
+chromance::core::BreathingEffect breathing;
 chromance::core::IEffect* current_effect = &index_walk;
 uint8_t current_mode = 1;
 
@@ -98,6 +100,9 @@ void select_mode(uint8_t mode) {
       break;
     case 6:
       effect = &hrv_hexagon;
+      break;
+    case 7:
+      effect = &breathing;
       break;
     default:
       effect = &index_walk;
@@ -203,7 +208,7 @@ void setup() {
       settings.brightness_percent(), chromance::core::kHardwareBrightnessCeilingPercent);
 
   Serial.println(
-      "Commands: 1=Index_Walk_Test 2=Strip_Segment_Stepper 3=Coord_Color_Test 4=Rainbow_Pulse 5=Seven_Comets 6=HRV_hexagon n=next(mode2/mode6) esc=resume_auto(mode2) +=brightness_up -=brightness_down");
+      "Commands: 1=Index_Walk_Test 2=Strip_Segment_Stepper 3=Coord_Color_Test 4=Rainbow_Pulse 5=Seven_Comets 6=HRV_hexagon 7=Breathing n=next(mode2/mode6/mode7) N=prev(mode7) esc=resume_auto(mode2/mode7) +=brightness_up -=brightness_down");
   Serial.print("Restored mode: ");
   Serial.println(static_cast<unsigned>(settings.mode()));
   print_brightness();
@@ -222,8 +227,25 @@ void loop() {
     if (c == '4') select_mode(4);
     if (c == '5') select_mode(5);
     if (c == '6') select_mode(6);
-    if (c == 'n' || c == 'N') {
+    if (c == '7') select_mode(7);
+    if (c == 'n') {
       if (current_mode == 2) {
+        strip_segment_stepper.next(now_ms);
+        strip_segment_stepper.set_auto_advance_enabled(false, now_ms);
+        mode2_hold = true;
+        last_strip_segment_k = 0xFF;
+        print_strip_segment_stepper_state();
+      } else if (current_mode == 6) {
+        hrv_hexagon.force_next(millis());
+        last_hrv_hex = 0xFF;
+      } else if (current_mode == 7) {
+        breathing.next_phase(now_ms);
+      }
+    }
+    if (c == 'N') {
+      if (current_mode == 7) {
+        breathing.prev_phase(now_ms);
+      } else if (current_mode == 2) {
         strip_segment_stepper.next(now_ms);
         strip_segment_stepper.set_auto_advance_enabled(false, now_ms);
         mode2_hold = true;
@@ -238,6 +260,8 @@ void loop() {
       if (current_mode == 2) {
         strip_segment_stepper.set_auto_advance_enabled(true, now_ms);
         mode2_hold = false;
+      } else if (current_mode == 7) {
+        breathing.set_auto(now_ms);
       }
     }
     if (c == '+') {
@@ -253,6 +277,9 @@ void loop() {
   uint32_t frame_ms = ota.is_updating() ? 100 : 20;
   if (current_effect == &hrv_hexagon) {
     frame_ms = 16;  // smoother fades for mode 6
+  }
+  if (current_effect == &breathing) {
+    frame_ms = 16;
   }
   scheduler.set_target_fps(frame_ms ? static_cast<uint16_t>(1000U / frame_ms) : 0);
   if (!scheduler.should_render(now_ms)) return;

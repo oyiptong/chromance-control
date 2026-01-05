@@ -38,7 +38,7 @@ class ModeSetting {
     // Runtime patterns are bound to numeric modes for persistence.
     // Keep this range check conservative to avoid bricking the control path.
     if (mode < 1) return 1;
-    if (mode > 6) return 1;
+    if (mode > 7) return 1;
     return mode;
   }
 

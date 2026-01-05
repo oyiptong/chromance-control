@@ -38,7 +38,8 @@ void test_mode_setting_sanitizes_values() {
   TEST_ASSERT_EQUAL_UINT8(1, ModeSetting::sanitize(1));
   TEST_ASSERT_EQUAL_UINT8(5, ModeSetting::sanitize(5));
   TEST_ASSERT_EQUAL_UINT8(6, ModeSetting::sanitize(6));
-  TEST_ASSERT_EQUAL_UINT8(1, ModeSetting::sanitize(7));
+  TEST_ASSERT_EQUAL_UINT8(7, ModeSetting::sanitize(7));
+  TEST_ASSERT_EQUAL_UINT8(1, ModeSetting::sanitize(8));
   TEST_ASSERT_EQUAL_UINT8(1, ModeSetting::sanitize(255));
 }
 
