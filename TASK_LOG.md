@@ -630,5 +630,23 @@ Files touched:
 - TASK_LOG.md
 
 Proof-of-life:
-- `pio test -e native`: PASSED (19 test cases)
+- `pio test -e native`: PASSED (28 test cases)
 - `pio run -e runtime`: SUCCESS
+
+### 2026-01-05 — Native test coverage: add unit tests for remaining `core/` modules
+
+Status: 🧪 Test added
+
+What was done:
+- Added native unit tests for `PixelsMap` scan-order/coord bounds, `MappingTables` invariants, validation pattern behaviors, and `NullModulationProvider`.
+
+Files touched:
+- test/test_pixels_map.cpp
+- test/test_mapping_tables.cpp
+- test/test_effect_patterns.cpp
+- test/test_modulation_provider.cpp
+- test/test_main.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (28 test cases)

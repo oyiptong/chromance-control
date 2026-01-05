@@ -26,6 +26,19 @@ void test_brightness_setting_begin_reads_existing_and_writes_back_quantized();
 void test_brightness_setting_set_persists_quantized_and_clamped();
 void test_brightness_setting_null_key_does_not_touch_store();
 
+void test_pixels_map_coords_in_bounds();
+void test_pixels_map_center_in_bounds();
+void test_pixels_map_scan_order_is_sorted_and_permutation();
+
+void test_mapping_tables_dimensions_and_counts();
+void test_mapping_tables_global_indices_are_consistent();
+
+void test_index_walk_effect_lights_one_pixel_and_wraps();
+void test_xy_scan_effect_uses_scan_order();
+void test_coord_color_effect_matches_expected_formula_and_scales_brightness();
+
+void test_null_modulation_provider_returns_defaults();
+
 int main(int argc, char** argv) {
   (void)argc;
   (void)argv;
@@ -57,6 +70,19 @@ int main(int argc, char** argv) {
   RUN_TEST(test_brightness_setting_begin_reads_existing_and_writes_back_quantized);
   RUN_TEST(test_brightness_setting_set_persists_quantized_and_clamped);
   RUN_TEST(test_brightness_setting_null_key_does_not_touch_store);
+
+  RUN_TEST(test_pixels_map_coords_in_bounds);
+  RUN_TEST(test_pixels_map_center_in_bounds);
+  RUN_TEST(test_pixels_map_scan_order_is_sorted_and_permutation);
+
+  RUN_TEST(test_mapping_tables_dimensions_and_counts);
+  RUN_TEST(test_mapping_tables_global_indices_are_consistent);
+
+  RUN_TEST(test_index_walk_effect_lights_one_pixel_and_wraps);
+  RUN_TEST(test_xy_scan_effect_uses_scan_order);
+  RUN_TEST(test_coord_color_effect_matches_expected_formula_and_scales_brightness);
+
+  RUN_TEST(test_null_modulation_provider_returns_defaults);
 
   return UNITY_END();
 }
