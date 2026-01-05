@@ -714,6 +714,25 @@ Proof-of-life:
 - `pio test -e native`: PASSED (31 test cases)
 - `pio run -e runtime`: SUCCESS
 
+### 2026-01-05 — Runtime: mode 5 “Two_Dots” upgraded to “Two_Comets” (head+tail)
+
+Status: 🟢 Done
+
+What was done:
+- Updated mode 5 from single-pixel dots to two comet trails:
+  - comet head length randomized per traversal (`3..5` LEDs at full brightness)
+  - linear fading tail of equal length
+  - colors still randomize after each full traversal
+
+Files touched:
+- src/core/effects/pattern_two_dots.h
+- test/test_effect_patterns.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (35 test cases)
+- `pio run -e runtime`: SUCCESS
+
 ### 2026-01-05 — Runtime: persist selected mode (pattern) across reboot
 
 Status: 🟢 Done

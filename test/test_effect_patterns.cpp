@@ -167,13 +167,15 @@ void test_rainbow_pulse_fades_and_holds() {
 void test_two_dots_lights_two_pixels_and_changes_colors_on_sequence() {
   TwoDotsEffect e(10);
   PixelsMap map;
-  std::vector<Rgb> out(10);
+  std::vector<Rgb> out(50);
   EffectFrame frame;
   frame.params.brightness = 255;
 
   e.reset(0);  // deterministic seed
   const Rgb a0 = e.color_a();
   const Rgb b0 = e.color_b();
+  const uint8_t head0 = e.head_len();
+  TEST_ASSERT_TRUE(head0 >= 3 && head0 <= 5);
 
   frame.now_ms = 0;
   e.render(frame, map, out.data(), out.size());
@@ -181,10 +183,11 @@ void test_two_dots_lights_two_pixels_and_changes_colors_on_sequence() {
   for (const auto& c : out) {
     if (c.r || c.g || c.b) ++lit;
   }
-  TEST_ASSERT_EQUAL_UINT32(2, static_cast<uint32_t>(lit));
+  // Two comets, each roughly (2*head_len - 1) lit pixels; no overlap expected at this size.
+  TEST_ASSERT_TRUE(lit >= 10 && lit <= 18);
 
   // After one full loop, colors should change.
-  frame.now_ms = 10 * 10;  // step_ms * led_count
+  frame.now_ms = static_cast<uint32_t>(10 * out.size());  // step_ms * led_count
   e.render(frame, map, out.data(), out.size());
   const Rgb a1 = e.color_a();
   const Rgb b1 = e.color_b();

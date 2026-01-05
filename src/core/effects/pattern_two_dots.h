@@ -13,13 +13,13 @@ class TwoDotsEffect final : public IEffect {
  public:
   explicit TwoDotsEffect(uint16_t step_ms = 25) : step_ms_(step_ms) {}
 
-  const char* id() const override { return "Two_Dots"; }
+  const char* id() const override { return "Two_Comets"; }
 
   void reset(uint32_t now_ms) override {
     start_ms_ = now_ms;
     rng_ = 0x9E3779B9u ^ now_ms;
     seq_index_ = 0;
-    pick_new_colors();
+    pick_new_sequence();
   }
 
   void render(const EffectFrame& frame,
@@ -41,24 +41,66 @@ class TwoDotsEffect final : public IEffect {
     const uint32_t loop = n ? (step / n) : 0;
     if (loop != seq_index_) {
       seq_index_ = loop;
-      pick_new_colors();
+      pick_new_sequence();
     }
 
     const size_t pos_a = static_cast<size_t>(step % n);
     const size_t pos_b = static_cast<size_t>((n - 1U) - (step % n));
 
-    const uint8_t v = frame.params.brightness;
-    const Rgb a = scale(color_a_, v);
-    const Rgb b = scale(color_b_, v);
-
-    out_rgb[pos_a] = add_sat(out_rgb[pos_a], a);
-    out_rgb[pos_b] = add_sat(out_rgb[pos_b], b);
+    const uint16_t comet_len = static_cast<uint16_t>(head_len_ * 2U);
+    render_comet_forward(pos_a, color_a_, frame.params.brightness, out_rgb, n, comet_len);
+    render_comet_backward(pos_b, color_b_, frame.params.brightness, out_rgb, n, comet_len);
   }
 
   Rgb color_a() const { return color_a_; }
   Rgb color_b() const { return color_b_; }
+  uint8_t head_len() const { return head_len_; }
 
  private:
+  void render_comet_forward(size_t head_pos,
+                            const Rgb& base,
+                            uint8_t brightness,
+                            Rgb* out_rgb,
+                            size_t n,
+                            uint16_t comet_len) const {
+    for (uint16_t d = 0; d < comet_len; ++d) {
+      const size_t idx = static_cast<size_t>((head_pos + n - (d % n)) % n);
+      out_rgb[idx] = add_sat(out_rgb[idx], scale(base, scale_for_offset(d, brightness)));
+    }
+  }
+
+  void render_comet_backward(size_t head_pos,
+                             const Rgb& base,
+                             uint8_t brightness,
+                             Rgb* out_rgb,
+                             size_t n,
+                             uint16_t comet_len) const {
+    for (uint16_t d = 0; d < comet_len; ++d) {
+      const size_t idx = static_cast<size_t>((head_pos + (d % n)) % n);
+      out_rgb[idx] = add_sat(out_rgb[idx], scale(base, scale_for_offset(d, brightness)));
+    }
+  }
+
+  uint8_t scale_for_offset(uint16_t d, uint8_t brightness) const {
+    const uint8_t head = head_len_;
+    if (head == 0) {
+      return 0;
+    }
+
+    uint8_t alpha = 0;
+    if (d < head) {
+      alpha = 255;
+    } else if (d < static_cast<uint16_t>(head * 2U)) {
+      const uint8_t t = static_cast<uint8_t>(d - head);  // 0..head-1
+      // Tail length equals head length; fade linearly to near-black.
+      alpha = static_cast<uint8_t>(((head - 1U - t) * 255U) / (head - 1U));
+    } else {
+      alpha = 0;
+    }
+
+    return static_cast<uint8_t>((static_cast<uint16_t>(alpha) * brightness) / 255U);
+  }
+
   static Rgb scale(const Rgb& c, uint8_t v) {
     return Rgb{static_cast<uint8_t>((static_cast<uint16_t>(c.r) * v) / 255U),
                static_cast<uint8_t>((static_cast<uint16_t>(c.g) * v) / 255U),
@@ -96,7 +138,7 @@ class TwoDotsEffect final : public IEffect {
     return Rgb{static_cast<uint8_t>(hue * 3U), 0, static_cast<uint8_t>(255U - hue * 3U)};
   }
 
-  void pick_new_colors() {
+  void pick_new_sequence() {
     // Pick two bright colors based on random hues, ensuring they are not identical.
     const uint8_t hue_a = static_cast<uint8_t>(next_u32() & 0xFF);
     uint8_t hue_b = static_cast<uint8_t>(next_u32() & 0xFF);
@@ -105,16 +147,19 @@ class TwoDotsEffect final : public IEffect {
     }
     color_a_ = hue_to_rgb(hue_a);
     color_b_ = hue_to_rgb(hue_b);
+
+    // Head length 3..5; tail length matches head length.
+    head_len_ = static_cast<uint8_t>(3U + (next_u32() % 3U));
   }
 
   uint32_t start_ms_ = 0;
   uint16_t step_ms_ = 25;
   uint32_t rng_ = 0x12345678u;
   uint32_t seq_index_ = 0;
+  uint8_t head_len_ = 3;
   Rgb color_a_{255, 0, 0};
   Rgb color_b_{0, 255, 0};
 };
 
 }  // namespace core
 }  // namespace chromance
-
