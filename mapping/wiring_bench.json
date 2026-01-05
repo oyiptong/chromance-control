@@ -6,17 +6,17 @@
     {
       "name": "strip1",
       "segments": [
-        { "seg": 1, "dir": "a_to_b", "_comment": "CONFIDENCE: DERIVED - verified on-device (runtime_bench Index_Walk_Test)" },
-        { "seg": 2, "dir": "a_to_b", "_comment": "CONFIDENCE: DERIVED - verified on-device (runtime_bench Index_Walk_Test)" },
-        { "seg": 3, "dir": "a_to_b", "_comment": "CONFIDENCE: DERIVED - verified on-device (runtime_bench Index_Walk_Test)" },
-        { "seg": 4, "dir": "a_to_b", "_comment": "CONFIDENCE: DERIVED - verified on-device (runtime_bench Index_Walk_Test)" },
-        { "seg": 5, "dir": "a_to_b", "_comment": "CONFIDENCE: DERIVED - verified on-device (runtime_bench Index_Walk_Test)" },
-        { "seg": 6, "dir": "a_to_b", "_comment": "CONFIDENCE: DERIVED - verified on-device (runtime_bench Index_Walk_Test)" },
-        { "seg": 7, "dir": "a_to_b", "_comment": "CONFIDENCE: DERIVED - verified on-device (runtime_bench Index_Walk_Test)" },
-        { "seg": 8, "dir": "a_to_b", "_comment": "CONFIDENCE: DERIVED - verified on-device (runtime_bench Index_Walk_Test)" },
-        { "seg": 9, "dir": "a_to_b", "_comment": "CONFIDENCE: DERIVED - verified on-device (runtime_bench Index_Walk_Test)" },
-        { "seg": 10, "dir": "a_to_b", "_comment": "CONFIDENCE: DERIVED - verified on-device (runtime_bench Index_Walk_Test)" },
-        { "seg": 11, "dir": "a_to_b", "_comment": "CONFIDENCE: DERIVED - verified on-device (runtime_bench Index_Walk_Test)" }
+        { "seg": 1, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime_bench Index_Walk_Test, 2026-01-04)" },
+        { "seg": 2, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime_bench Index_Walk_Test, 2026-01-04)" },
+        { "seg": 3, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime_bench Index_Walk_Test, 2026-01-04)" },
+        { "seg": 4, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime_bench Index_Walk_Test, 2026-01-04)" },
+        { "seg": 5, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime_bench Index_Walk_Test, 2026-01-04)" },
+        { "seg": 6, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime_bench Index_Walk_Test, 2026-01-04)" },
+        { "seg": 7, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime_bench Index_Walk_Test, 2026-01-04)" },
+        { "seg": 8, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime_bench Index_Walk_Test, 2026-01-04)" },
+        { "seg": 9, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime_bench Index_Walk_Test, 2026-01-04)" },
+        { "seg": 10, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime_bench Index_Walk_Test, 2026-01-04)" },
+        { "seg": 11, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime_bench Index_Walk_Test, 2026-01-04)" }
       ]
     }
   ]

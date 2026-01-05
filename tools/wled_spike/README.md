@@ -49,6 +49,10 @@ WiFi credentials (optional):
 Pin note (Feather ESP32, this setup):
 - WLED APA102 bus1 (the 168-LED / 12-segment strip) did not drive reliably on GPIO19/18 but works on GPIO17/16; treat GPIO19/18 as known-bad for WLED APA102 here.
 
+Power note (this setup):
+- At higher brightness, some pixels on bus1 may lose the Blue channel (white→orange, magenta→red). Lower brightness fixes it.
+- Mitigation: add/verify power injection and/or enable WLED power limiting (set “Maximum PSU Current”) and cap brightness.
+
 Optional: apply a pre-made LED Preferences template (faster than clicking):
 - In WLED: `Config → LED Preferences`
 - Under “Config template”, choose `tools/wled_spike/chromance_led_prefs_template.json` and click “Apply”
@@ -75,6 +79,13 @@ Additionally, LEDs at indices `(0+1)`, `(154+1)`, `(322+1)`, `(406+1)` should be
 
 If the overlay colors look wrong (e.g. red appears orange):
 - Set each APA102 output’s “Color Order” to `BRG` in `Config → LED Preferences`, Save, reboot.
+
+4-segment regression test (recommended):
+- Configure 4 segments and confirm all ranges light:
+  - seg0: start 0, len 154 = Red
+  - seg1: start 154, len 168 = Green
+  - seg2: start 322, len 84 = Blue
+  - seg3: start 406, len 154 = White
 
 If you cannot configure non-overlapping bus start indices (or the printed bus starts are not contiguous),
 the Milestone 1 multi-bus “kill gate” fails for Option B.

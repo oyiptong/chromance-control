@@ -503,3 +503,63 @@ What was observed:
 Notes / Decisions:
 - Treat GPIO19/18 as a known-bad APA102 pin pair for WLED soft-SPI on Feather ESP32 in this setup.
 - Prior suspicion that GPIO17/16 was unreliable was likely a misdiagnosis.
+
+### 2026-01-04 — Milestone 1 COMPLETE — WLED contiguous indexing + working 4-bus APA102 output
+
+Status: 🟢 Done
+
+What was verified:
+- PASS: WLED exposes a single contiguous index space with correct bus boundaries for Chromance:
+  - bus0 start=0 len=154
+  - bus1 start=154 len=168
+  - bus2 start=322 len=84
+  - bus3 start=406 len=154
+- FIX: bus1 (12 segments / 168 LEDs) must use DATA=17 / CLK=16 on Feather ESP32 (GPIO19/18 fails in this setup).
+
+Notes / Decisions:
+- Known constraint (power): at higher brightness, some pixels on bus1 may lose the Blue channel (white→orange, magenta→red); mitigated by power injection and/or WLED power limiting + brightness cap.
+- WLED spike patching:
+  - WebUI patched to allow 4 SPI (2-pin) busses.
+  - Ledmap loader patched to support Chromance sparse 2D `ledmap.json` without truncation.
+  - Spike build sets `MAX_LEDS=20000` to avoid 2D size limits.
+
+Proof-of-life:
+- User serial banner (WLED spike):
+  - `ChromanceSpike: busses=4 total_len=560`
+  - `ChromanceSpike: idx=154 -> bus1 local=0`
+  - `ChromanceSpike: idx=322 -> bus2 local=0`
+  - `ChromanceSpike: idx=406 -> bus3 local=0`
+
+### 2026-01-04 — Milestone 2 COMPLETE — mapping generator + bench subset + headers + builds
+
+Status: 🟢 Done
+
+What was verified:
+- Mapping generator runs deterministically for full + bench wiring (no collisions, stable dimensions).
+- Bench subset generation works via `mapping/wiring_bench.json` (`isBenchSubset: true`) and produces bench artifacts.
+- Generated headers exist for both full + bench and are produced by the pre-build hook (and `include/generated/` is gitignored).
+- PlatformIO envs build and native tests pass.
+
+Proof-of-life:
+- Full generator: `leds=560 width=169 height=112 holes=18368`
+- Bench generator: `leds=154 width=56 height=98 holes=5334`
+- `pio test -e native`: PASSED (7 test cases)
+- `pio run -e runtime`: SUCCESS
+- `pio run -e runtime_bench`: SUCCESS
+
+### 2026-01-04 — Milestone 0 closeout: wiring confidence markers updated to VERIFIED
+
+Status: 🟢 Done
+
+What was done:
+- Updated per-segment `_comment` confidence markers in `mapping/wiring.json` and `mapping/wiring_bench.json` from `DERIVED` → `VERIFIED` now that all strips were physically validated.
+
+Files touched:
+- mapping/wiring.json
+- mapping/wiring_bench.json
+- TASK_LOG.md
+
+Proof-of-life:
+- Full generator: `leds=560 width=169 height=112 holes=18368`
+- Bench generator: `leds=154 width=56 height=98 holes=5334`
+- `pio test -e native`: PASSED (7 test cases)
