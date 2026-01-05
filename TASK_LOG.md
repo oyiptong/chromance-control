@@ -754,6 +754,26 @@ Proof-of-life:
 - `pio run -e runtime`: SUCCESS
 - `pio run -e runtime_bench`: SUCCESS
 
+### 2026-01-05 — Runtime: “Seven_Comets” per-comet speed (size-based)
+
+Status: 🟢 Done
+
+What was done:
+- Updated “Seven_Comets” so each comet advances at its own speed derived from its head length:
+  - larger head length => faster movement (smaller `step_ms`)
+  - motion is integrated per-comet (no speed-change discontinuities when a comet rerolls size)
+- Updated native tests to validate the `head_len -> step_ms` mapping and that per-comet sequence timers still reset independently.
+
+Files touched:
+- src/core/effects/pattern_two_dots.h
+- test/test_effect_patterns.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (35 test cases)
+- `pio run -e runtime`: SUCCESS
+- `pio run -e runtime_bench`: SUCCESS
+
 ### 2026-01-05 — Runtime: mode 5 “Seven_Comets” (was Two_Comets)
 
 Status: 🟢 Done

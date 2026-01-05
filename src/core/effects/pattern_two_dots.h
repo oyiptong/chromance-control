@@ -17,11 +17,10 @@ class TwoDotsEffect final : public IEffect {
 
   void reset(uint32_t now_ms) override {
     start_ms_ = now_ms;
-    last_step_ = 0;
+    last_update_ms_ = now_ms;
+    positions_initialized_ = false;
     rng_ = 0x9E3779B9u ^ now_ms;
-    for (uint8_t i = 0; i < kCometCount; ++i) {
-      reset_comet(i);
-    }
+    for (uint8_t i = 0; i < kCometCount; ++i) reset_comet(i);
   }
 
   void render(const EffectFrame& frame,
@@ -36,24 +35,14 @@ class TwoDotsEffect final : public IEffect {
       out_rgb[i] = kBlack;
     }
 
-    const uint32_t elapsed = frame.now_ms - start_ms_;
-    const uint32_t step = step_ms_ ? (elapsed / step_ms_) : elapsed;
     const size_t n = led_count;
 
-    if (step != last_step_) {
-      advance_sequences(static_cast<uint32_t>(step - last_step_));
-      last_step_ = step;
-    }
-
-    const size_t base = static_cast<size_t>(step % n);
+    update_state(frame.now_ms, n);
     for (uint8_t i = 0; i < kCometCount; ++i) {
-      const size_t offset = (n * static_cast<size_t>(i)) / kCometCount;
-      const bool forward = (i % 2U) == 0;
-      const size_t head_pos =
-          forward ? ((base + offset) % n) : ((offset + (n - 1U - base)) % n);
+      const size_t head_pos = static_cast<size_t>(pos_[i] % n);
       const uint8_t head_len = head_len_[i];
       const uint16_t comet_len = static_cast<uint16_t>(head_len * 2U);
-      if (forward) {
+      if (direction_forward(i)) {
         render_comet_forward(head_pos, color_[i], frame.params.brightness, out_rgb, n, comet_len,
                              head_len);
       } else {
@@ -66,14 +55,18 @@ class TwoDotsEffect final : public IEffect {
   static constexpr uint8_t comet_count() { return kCometCount; }
   Rgb color(uint8_t i) const { return i < kCometCount ? color_[i] : kBlack; }
   uint8_t head_len(uint8_t i) const { return i < kCometCount ? head_len_[i] : 0; }
-  uint32_t sequence_len_steps(uint8_t i) const { return i < kCometCount ? seq_len_steps_[i] : 0; }
-  uint32_t sequence_remaining_steps(uint8_t i) const {
-    return i < kCometCount ? seq_remaining_steps_[i] : 0;
+  uint32_t sequence_len_ms(uint8_t i) const { return i < kCometCount ? seq_len_ms_[i] : 0; }
+  uint32_t sequence_remaining_ms(uint8_t i) const { return i < kCometCount ? seq_remaining_ms_[i] : 0; }
+  uint16_t step_ms_for_comet(uint8_t i) const {
+    return i < kCometCount ? step_ms_for_head_len(head_len_[i]) : 0;
   }
+  uint32_t position(uint8_t i) const { return i < kCometCount ? pos_[i] : 0; }
 
  private:
-  static constexpr uint32_t kMinSeqLenSteps = 40;   // 1.0s at 25ms
-  static constexpr uint32_t kMaxSeqLenSteps = 240;  // 6.0s at 25ms
+  static constexpr uint32_t kMinSeqLenMs = 1000;
+  static constexpr uint32_t kMaxSeqLenMs = 6000;
+
+  static bool direction_forward(uint8_t comet_index) { return (comet_index % 2U) == 0; }
 
   void render_comet_forward(size_t head_pos,
                             const Rgb& base,
@@ -160,15 +153,23 @@ class TwoDotsEffect final : public IEffect {
     return rng_;
   }
 
-  uint32_t pick_unique_seq_len_steps(uint8_t comet_index) {
+  uint16_t step_ms_for_head_len(uint8_t head_len) const {
+    // Larger head_len => faster (smaller step_ms).
+    if (head_len == 0 || step_ms_ == 0) return step_ms_;
+    const uint32_t numer = static_cast<uint32_t>(step_ms_) * 4U;
+    const uint32_t ms = (numer + (head_len / 2U)) / head_len;  // rounded
+    return static_cast<uint16_t>(ms ? ms : 1U);
+  }
+
+  uint32_t pick_unique_seq_len_ms(uint8_t comet_index) {
     // Pick a sequence length that is unique among comets (at this moment).
     for (uint8_t attempt = 0; attempt < 32; ++attempt) {
-      const uint32_t span = kMaxSeqLenSteps - kMinSeqLenSteps + 1U;
-      const uint32_t candidate = kMinSeqLenSteps + (next_u32() % span);
+      const uint32_t span = kMaxSeqLenMs - kMinSeqLenMs + 1U;
+      const uint32_t candidate = kMinSeqLenMs + (next_u32() % span);
       bool unique = true;
       for (uint8_t j = 0; j < kCometCount; ++j) {
         if (j == comet_index) continue;
-        if (seq_len_steps_[j] == candidate) {
+        if (seq_len_ms_[j] == candidate) {
           unique = false;
           break;
         }
@@ -179,11 +180,11 @@ class TwoDotsEffect final : public IEffect {
     }
 
     // Fallback: walk the range until unique.
-    for (uint32_t candidate = kMinSeqLenSteps; candidate <= kMaxSeqLenSteps; ++candidate) {
+    for (uint32_t candidate = kMinSeqLenMs; candidate <= kMaxSeqLenMs; ++candidate) {
       bool unique = true;
       for (uint8_t j = 0; j < kCometCount; ++j) {
         if (j == comet_index) continue;
-        if (seq_len_steps_[j] == candidate) {
+        if (seq_len_ms_[j] == candidate) {
           unique = false;
           break;
         }
@@ -192,37 +193,60 @@ class TwoDotsEffect final : public IEffect {
         return candidate;
       }
     }
-    return kMinSeqLenSteps;
+    return kMinSeqLenMs;
   }
 
   void reset_comet(uint8_t i) {
     const uint8_t hue = static_cast<uint8_t>(next_u32() & 0xFF);
     color_[i] = hue_to_rgb(hue);
     head_len_[i] = static_cast<uint8_t>(3U + (next_u32() % 3U));  // 3..5
-    seq_len_steps_[i] = pick_unique_seq_len_steps(i);
-    seq_remaining_steps_[i] = seq_len_steps_[i];
+    seq_len_ms_[i] = pick_unique_seq_len_ms(i);
+    seq_remaining_ms_[i] = seq_len_ms_[i];
+    accum_ms_[i] = 0;
   }
 
-  void advance_sequences(uint32_t delta_steps) {
-    if (delta_steps == 0) return;
+  void update_state(uint32_t now_ms, size_t n) {
+    if (n == 0) return;
+    if (!positions_initialized_) {
+      for (uint8_t i = 0; i < kCometCount; ++i) {
+        pos_[i] = (static_cast<uint32_t>(n) * static_cast<uint32_t>(i)) / kCometCount;
+        accum_ms_[i] = 0;
+      }
+      positions_initialized_ = true;
+    }
+
+    const uint32_t delta_ms = now_ms - last_update_ms_;
+    last_update_ms_ = now_ms;
 
     for (uint8_t i = 0; i < kCometCount; ++i) {
-      uint32_t remaining = seq_remaining_steps_[i];
-      if (remaining == 0) {
-        reset_comet(i);
-        remaining = seq_remaining_steps_[i];
+      const uint16_t step_ms = step_ms_for_head_len(head_len_[i]);
+      if (step_ms) {
+        accum_ms_[i] += delta_ms;
+        const uint32_t steps = accum_ms_[i] / step_ms;
+        accum_ms_[i] = accum_ms_[i] % step_ms;
+        if (steps) {
+          if (direction_forward(i)) {
+            pos_[i] += steps;
+          } else {
+            pos_[i] -= steps;
+          }
+        }
       }
 
-      uint32_t d = delta_steps;
+      uint32_t remaining = seq_remaining_ms_[i];
+      if (remaining == 0) {
+        reset_comet(i);
+        remaining = seq_remaining_ms_[i];
+      }
+
+      uint32_t d = delta_ms;
       while (d >= remaining) {
         d -= remaining;
         reset_comet(i);
-        remaining = seq_remaining_steps_[i];
-        if (remaining == 0) {
-          remaining = 1;
-        }
+        remaining = seq_remaining_ms_[i];
+        if (remaining == 0) remaining = 1;
       }
-      seq_remaining_steps_[i] = static_cast<uint32_t>(remaining - d);
+      seq_remaining_ms_[i] = static_cast<uint32_t>(remaining - d);
     }
   }
 
@@ -230,23 +254,30 @@ class TwoDotsEffect final : public IEffect {
 
   uint32_t start_ms_ = 0;
   uint16_t step_ms_ = 25;
-  uint32_t last_step_ = 0;
+  uint32_t last_update_ms_ = 0;
+  bool positions_initialized_ = false;
   uint32_t rng_ = 0x12345678u;
   uint8_t head_len_[kCometCount] = {3, 3, 3, 3, 3, 3, 3};
-  uint32_t seq_len_steps_[kCometCount] = {kMinSeqLenSteps,
-                                         kMinSeqLenSteps + 1,
-                                         kMinSeqLenSteps + 2,
-                                         kMinSeqLenSteps + 3,
-                                         kMinSeqLenSteps + 4,
-                                         kMinSeqLenSteps + 5,
-                                         kMinSeqLenSteps + 6};
-  uint32_t seq_remaining_steps_[kCometCount] = {kMinSeqLenSteps,
-                                               kMinSeqLenSteps + 1,
-                                               kMinSeqLenSteps + 2,
-                                               kMinSeqLenSteps + 3,
-                                               kMinSeqLenSteps + 4,
-                                               kMinSeqLenSteps + 5,
-                                               kMinSeqLenSteps + 6};
+  uint32_t seq_len_ms_[kCometCount] = {
+      kMinSeqLenMs,
+      kMinSeqLenMs + 1,
+      kMinSeqLenMs + 2,
+      kMinSeqLenMs + 3,
+      kMinSeqLenMs + 4,
+      kMinSeqLenMs + 5,
+      kMinSeqLenMs + 6,
+  };
+  uint32_t seq_remaining_ms_[kCometCount] = {
+      kMinSeqLenMs,
+      kMinSeqLenMs + 1,
+      kMinSeqLenMs + 2,
+      kMinSeqLenMs + 3,
+      kMinSeqLenMs + 4,
+      kMinSeqLenMs + 5,
+      kMinSeqLenMs + 6,
+  };
+  uint32_t pos_[kCometCount] = {0, 0, 0, 0, 0, 0, 0};
+  uint32_t accum_ms_[kCometCount] = {0, 0, 0, 0, 0, 0, 0};
   Rgb color_[kCometCount] = {
       Rgb{255, 0, 0}, Rgb{0, 255, 0}, Rgb{0, 0, 255}, Rgb{255, 255, 0},
       Rgb{255, 0, 255}, Rgb{0, 255, 255}, Rgb{255, 255, 255},

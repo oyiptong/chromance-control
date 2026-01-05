@@ -177,11 +177,15 @@ void test_two_dots_lights_two_pixels_and_changes_colors_on_sequence() {
   const uint8_t kComets = TwoDotsEffect::comet_count();
   std::vector<uint32_t> seq0(kComets);
   for (uint8_t i = 0; i < kComets; ++i) {
-    seq0[i] = e.sequence_len_steps(i);
-    TEST_ASSERT_TRUE(seq0[i] >= 40 && seq0[i] <= 240);
-    TEST_ASSERT_EQUAL_UINT32(seq0[i], e.sequence_remaining_steps(i));
+    seq0[i] = e.sequence_len_ms(i);
+    TEST_ASSERT_TRUE(seq0[i] >= 1000 && seq0[i] <= 6000);
+    TEST_ASSERT_EQUAL_UINT32(seq0[i], e.sequence_remaining_ms(i));
     const uint8_t h = e.head_len(i);
     TEST_ASSERT_TRUE(h >= 3 && h <= 5);
+    const uint16_t step_ms = e.step_ms_for_comet(i);
+    if (h == 3) TEST_ASSERT_EQUAL_UINT16(13, step_ms);
+    if (h == 4) TEST_ASSERT_EQUAL_UINT16(10, step_ms);
+    if (h == 5) TEST_ASSERT_EQUAL_UINT16(8, step_ms);
     for (uint8_t j = 0; j < i; ++j) {
       TEST_ASSERT_NOT_EQUAL_UINT32(seq0[j], seq0[i]);
     }
@@ -195,22 +199,44 @@ void test_two_dots_lights_two_pixels_and_changes_colors_on_sequence() {
   }
   TEST_ASSERT_TRUE(lit > 0);
 
-  // Comet 0 should reset independently when its per-comet sequence elapses.
-  const uint32_t len0 = e.sequence_len_steps(0);
-  frame.now_ms = static_cast<uint32_t>(10U * (len0 - 1U));
-  e.render(frame, map, out.data(), out.size());
-  TEST_ASSERT_EQUAL_UINT32(1, e.sequence_remaining_steps(0));
+  // Larger comets should be faster (smaller step_ms).
+  uint8_t min_head = 255;
+  uint8_t max_head = 0;
+  uint16_t min_step_ms = 0xFFFF;
+  uint16_t max_step_ms = 0;
+  for (uint8_t i = 0; i < kComets; ++i) {
+    const uint8_t h = e.head_len(i);
+    const uint16_t s = e.step_ms_for_comet(i);
+    if (h < min_head) {
+      min_head = h;
+      max_step_ms = s;
+    }
+    if (h > max_head) {
+      max_head = h;
+      min_step_ms = s;
+    }
+  }
+  if (max_head > min_head) {
+    TEST_ASSERT_TRUE_MESSAGE(min_step_ms < max_step_ms,
+                             "expected larger head_len => smaller step_ms (faster)");
+  }
 
-  frame.now_ms = static_cast<uint32_t>(10U * len0);
+  // Comet 0 should reset independently when its per-comet sequence elapses (ms-based).
+  const uint32_t len0 = e.sequence_len_ms(0);
+  frame.now_ms = len0 - 1U;
   e.render(frame, map, out.data(), out.size());
-  TEST_ASSERT_EQUAL_UINT32(e.sequence_len_steps(0), e.sequence_remaining_steps(0));
+  TEST_ASSERT_EQUAL_UINT32(1, e.sequence_remaining_ms(0));
+
+  frame.now_ms = len0;
+  e.render(frame, map, out.data(), out.size());
+  TEST_ASSERT_EQUAL_UINT32(e.sequence_len_ms(0), e.sequence_remaining_ms(0));
 
   // Sequence lengths remain unique after resets.
   for (uint8_t i = 0; i < kComets; ++i) {
-    const uint32_t li = e.sequence_len_steps(i);
-    TEST_ASSERT_TRUE(li >= 40 && li <= 240);
+    const uint32_t li = e.sequence_len_ms(i);
+    TEST_ASSERT_TRUE(li >= 1000 && li <= 6000);
     for (uint8_t j = 0; j < i; ++j) {
-      TEST_ASSERT_NOT_EQUAL_UINT32(e.sequence_len_steps(j), li);
+      TEST_ASSERT_NOT_EQUAL_UINT32(e.sequence_len_ms(j), li);
     }
   }
 }
