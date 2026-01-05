@@ -954,6 +954,31 @@ Proof-of-life:
 - `pio run -e runtime`: SUCCESS
 - `pio run -e runtime_bench`: SUCCESS
 
+### 2026-01-05 — Runtime: unify n/N/ESC stepping across modes 2/6/7
+
+Status: 🟢 Done
+
+What was done:
+- Standardized step controls for all modes that support staged stepping:
+  - `n`: advance to next stage and stay there
+  - `N`: go to previous stage and stay there
+  - `ESC`: return to auto mode
+- Mode 2: added `prev()` so `N` walks `k` backward (wraps 1↔12).
+- Mode 6: added manual hex stepping (next/prev) with `ESC` restoring auto random cycling; manual mode repeats the fade cycle on the selected hex without auto-switching.
+
+Files touched:
+- src/core/effects/pattern_strip_segment_stepper.h
+- src/core/effects/pattern_hrv_hexagon.h
+- src/main_runtime.cpp
+- test/test_effect_patterns.cpp
+- test/test_main.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (42 test cases)
+- `pio run -e runtime`: SUCCESS
+- `pio run -e runtime_bench`: SUCCESS
+
 ### 2026-01-05 — Runtime: mode 5 “Seven_Comets” (was Two_Comets)
 
 Status: 🟢 Done

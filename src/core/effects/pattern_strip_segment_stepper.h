@@ -38,6 +38,11 @@ class StripSegmentStepperEffect final : public IEffect {
     last_step_ms_ = now_ms;
   }
 
+  void prev(uint32_t now_ms) {
+    segment_number_ = segment_number_ <= 1 ? 12 : static_cast<uint8_t>(segment_number_ - 1U);
+    last_step_ms_ = now_ms;
+  }
+
   void set_auto_advance_enabled(bool enabled, uint32_t now_ms) {
     auto_advance_enabled_ = enabled;
     last_step_ms_ = now_ms;

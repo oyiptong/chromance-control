@@ -25,6 +25,7 @@ class HrvHexagonEffect final : public IEffect {
     cycle_start_ms_ = now_ms;
     rng_ = 0xA5A5A5A5u ^ now_ms;
     build_segment_presence();
+    manual_enabled_ = false;
     pick_new_hex(/*avoid_current=*/false);
   }
 
@@ -36,9 +37,14 @@ class HrvHexagonEffect final : public IEffect {
 
     for (size_t i = 0; i < led_count; ++i) out_rgb[i] = kBlack;
 
-    advance_cycles(frame.now_ms);
+    if (!manual_enabled_) {
+      advance_cycles(frame.now_ms);
+    }
 
-    const uint32_t elapsed = frame.now_ms - cycle_start_ms_;
+    uint32_t elapsed = frame.now_ms - cycle_start_ms_;
+    if (manual_enabled_) {
+      elapsed = kCycleMs ? (elapsed % kCycleMs) : elapsed;
+    }
     const uint16_t alpha16 = phase_alpha16(elapsed);
     if (alpha16 == 0 || current_seg_count_ == 0) return;
 
@@ -58,10 +64,14 @@ class HrvHexagonEffect final : public IEffect {
   uint8_t current_segment_count() const { return current_seg_count_; }
   const uint8_t* current_segments() const { return current_segs_; }
 
-  void force_next(uint32_t now_ms) {
+  void set_auto(uint32_t now_ms) {
+    manual_enabled_ = false;
     cycle_start_ms_ = now_ms;
     pick_new_hex(/*avoid_current=*/true);
   }
+
+  void next(uint32_t now_ms) { step_manual(/*dir=*/+1, now_ms); }
+  void prev(uint32_t now_ms) { step_manual(/*dir=*/-1, now_ms); }
 
  private:
   static constexpr uint32_t kFadeInMs = 4000;
@@ -194,20 +204,59 @@ class HrvHexagonEffect final : public IEffect {
     return false;
   }
 
-  void pick_new_hex(bool avoid_current) {
-    uint8_t candidates[8];
-    uint8_t candidate_count = 0;
-    for (uint8_t h = 0; h < 8; ++h) {
-      uint8_t present = 0;
+  uint8_t build_candidates(uint8_t* out, uint8_t out_cap) const {
+    uint8_t count = 0;
+    for (uint8_t h = 0; h < 8 && count < out_cap; ++h) {
+      bool present = false;
       for (uint8_t i = 0; i < kHexSegCount; ++i) {
         const uint8_t seg = kHexSegs[h][i];
         if (seg_present_[seg]) {
-          present = 1;
+          present = true;
           break;
         }
       }
-      if (present) candidates[candidate_count++] = h;
+      if (present) out[count++] = h;
     }
+    return count;
+  }
+
+  void step_manual(int8_t dir, uint32_t now_ms) {
+    build_segment_presence();
+
+    uint8_t candidates[8];
+    const uint8_t n = build_candidates(candidates, 8);
+    if (n == 0) return;
+
+    uint8_t pos = 0;
+    for (uint8_t i = 0; i < n; ++i) {
+      if (candidates[i] == current_hex_) {
+        pos = i;
+        break;
+      }
+    }
+
+    uint8_t next_pos = pos;
+    if (dir > 0) {
+      next_pos = static_cast<uint8_t>((pos + 1U) % n);
+    } else if (dir < 0) {
+      next_pos = static_cast<uint8_t>((pos + n - 1U) % n);
+    }
+
+    manual_enabled_ = true;
+    cycle_start_ms_ = now_ms;
+    current_hex_ = candidates[next_pos];
+    // Cache segments for this hex and pick a new color.
+    current_seg_count_ = 0;
+    for (uint8_t i = 0; i < kHexSegCount; ++i) {
+      const uint8_t seg = kHexSegs[current_hex_][i];
+      if (seg_present_[seg]) current_segs_[current_seg_count_++] = seg;
+    }
+    current_color_ = hue_to_rgb(static_cast<uint8_t>(next_u32() & 0xFF));
+  }
+
+  void pick_new_hex(bool avoid_current) {
+    uint8_t candidates[8];
+    const uint8_t candidate_count = build_candidates(candidates, 8);
 
     if (candidate_count == 0) {
       current_hex_ = 0;
@@ -266,6 +315,7 @@ class HrvHexagonEffect final : public IEffect {
   uint32_t rng_ = 0x12345678u;
 
   bool seg_present_[41] = {};
+  bool manual_enabled_ = false;
   uint8_t current_hex_ = 0;
   uint8_t current_segs_[9] = {};
   uint8_t current_seg_count_ = 0;

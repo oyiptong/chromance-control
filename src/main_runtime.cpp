@@ -208,7 +208,7 @@ void setup() {
       settings.brightness_percent(), chromance::core::kHardwareBrightnessCeilingPercent);
 
   Serial.println(
-      "Commands: 1=Index_Walk_Test 2=Strip_Segment_Stepper 3=Coord_Color_Test 4=Rainbow_Pulse 5=Seven_Comets 6=HRV_hexagon 7=Breathing n=next(mode2/mode6/mode7) N=prev(mode7) esc=resume_auto(mode2/mode7) +=brightness_up -=brightness_down");
+      "Commands: 1=Index_Walk_Test 2=Strip_Segment_Stepper 3=Coord_Color_Test 4=Rainbow_Pulse 5=Seven_Comets 6=HRV_hexagon 7=Breathing n=next(mode2/6/7) N=prev(mode2/6/7) esc=auto(mode2/6/7) +=brightness_up -=brightness_down");
   Serial.print("Restored mode: ");
   Serial.println(static_cast<unsigned>(settings.mode()));
   print_brightness();
@@ -236,24 +236,24 @@ void loop() {
         last_strip_segment_k = 0xFF;
         print_strip_segment_stepper_state();
       } else if (current_mode == 6) {
-        hrv_hexagon.force_next(millis());
+        hrv_hexagon.next(now_ms);
         last_hrv_hex = 0xFF;
       } else if (current_mode == 7) {
         breathing.next_phase(now_ms);
       }
     }
     if (c == 'N') {
-      if (current_mode == 7) {
-        breathing.prev_phase(now_ms);
-      } else if (current_mode == 2) {
-        strip_segment_stepper.next(now_ms);
+      if (current_mode == 2) {
+        strip_segment_stepper.prev(now_ms);
         strip_segment_stepper.set_auto_advance_enabled(false, now_ms);
         mode2_hold = true;
         last_strip_segment_k = 0xFF;
         print_strip_segment_stepper_state();
       } else if (current_mode == 6) {
-        hrv_hexagon.force_next(millis());
+        hrv_hexagon.prev(now_ms);
         last_hrv_hex = 0xFF;
+      } else if (current_mode == 7) {
+        breathing.prev_phase(now_ms);
       }
     }
     if (c == 27) {  // ESC
@@ -262,6 +262,9 @@ void loop() {
         mode2_hold = false;
       } else if (current_mode == 7) {
         breathing.set_auto(now_ms);
+      } else if (current_mode == 6) {
+        hrv_hexagon.set_auto(now_ms);
+        last_hrv_hex = 0xFF;
       }
     }
     if (c == '+') {

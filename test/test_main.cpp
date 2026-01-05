@@ -44,6 +44,8 @@ void test_strip_segment_stepper_lights_one_segment_per_strip_and_blanks_short_st
 void test_strip_segment_stepper_auto_advance_can_be_disabled();
 void test_breathing_effect_has_expected_phases();
 void test_breathing_effect_manual_phase_selection();
+void test_strip_segment_stepper_prev_wraps();
+void test_hrv_hexagon_manual_next_prev_and_auto_reset();
 
 void test_null_modulation_provider_returns_defaults();
 
@@ -102,6 +104,8 @@ int main(int argc, char** argv) {
   RUN_TEST(test_strip_segment_stepper_auto_advance_can_be_disabled);
   RUN_TEST(test_breathing_effect_has_expected_phases);
   RUN_TEST(test_breathing_effect_manual_phase_selection);
+  RUN_TEST(test_strip_segment_stepper_prev_wraps);
+  RUN_TEST(test_hrv_hexagon_manual_next_prev_and_auto_reset);
 
   RUN_TEST(test_null_modulation_provider_returns_defaults);
 

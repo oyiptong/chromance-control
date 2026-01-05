@@ -410,3 +410,55 @@ void test_breathing_effect_manual_phase_selection() {
   e.set_auto(0);
   TEST_ASSERT_FALSE(e.manual_enabled());
 }
+
+void test_strip_segment_stepper_prev_wraps() {
+  StripSegmentStepperEffect e(/*step_ms=*/0);
+  PixelsMap map;
+  std::vector<Rgb> out(map.led_count());
+  EffectFrame frame;
+  frame.params.brightness = 255;
+
+  e.reset(0);
+  TEST_ASSERT_EQUAL_UINT8(1, e.segment_number());
+  e.prev(0);
+  TEST_ASSERT_EQUAL_UINT8(12, e.segment_number());
+  e.prev(0);
+  TEST_ASSERT_EQUAL_UINT8(11, e.segment_number());
+  e.next(0);
+  TEST_ASSERT_EQUAL_UINT8(12, e.segment_number());
+  e.next(0);
+  TEST_ASSERT_EQUAL_UINT8(1, e.segment_number());
+
+  frame.now_ms = 0;
+  e.render(frame, map, out.data(), out.size());
+}
+
+void test_hrv_hexagon_manual_next_prev_and_auto_reset() {
+  HrvHexagonEffect e;
+  PixelsMap map;
+  std::vector<Rgb> out(map.led_count());
+  EffectFrame frame;
+  frame.params.brightness = 255;
+
+  e.reset(0);
+  const uint8_t h0 = e.current_hex_index();
+
+  e.next(0);
+  const uint8_t h1 = e.current_hex_index();
+  TEST_ASSERT_NOT_EQUAL_UINT8(h0, h1);
+
+  e.prev(0);
+  TEST_ASSERT_EQUAL_UINT8(h0, e.current_hex_index());
+
+  // In manual mode, hex should not change when crossing a cycle boundary.
+  frame.now_ms = 15000;
+  e.render(frame, map, out.data(), out.size());
+  TEST_ASSERT_EQUAL_UINT8(h0, e.current_hex_index());
+
+  // ESC-equivalent: back to auto, now boundary crossing should pick a new hex.
+  e.set_auto(15000);
+  const uint8_t ha = e.current_hex_index();
+  frame.now_ms = 30000;
+  e.render(frame, map, out.data(), out.size());
+  TEST_ASSERT_NOT_EQUAL_UINT8(ha, e.current_hex_index());
+}
