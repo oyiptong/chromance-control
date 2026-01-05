@@ -733,6 +733,27 @@ Proof-of-life:
 - `pio test -e native`: PASSED (35 test cases)
 - `pio run -e runtime`: SUCCESS
 
+### 2026-01-05 — Runtime: “Seven_Comets” per-comet sequences (unique lengths + independent rerolls)
+
+Status: 🟢 Done
+
+What was done:
+- Updated “Seven_Comets” so each comet has its own independently-timed “sequence” with:
+  - randomized head length (`3..5`) + color per comet
+  - randomized per-comet sequence length (unique across comets at any moment)
+  - per-comet reroll when its sequence completes (no longer tied to full-ring traversals)
+- Updated native tests to validate per-comet uniqueness and reset behavior.
+
+Files touched:
+- src/core/effects/pattern_two_dots.h
+- test/test_effect_patterns.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (35 test cases)
+- `pio run -e runtime`: SUCCESS
+- `pio run -e runtime_bench`: SUCCESS
+
 ### 2026-01-05 — Runtime: mode 5 “Seven_Comets” (was Two_Comets)
 
 Status: 🟢 Done

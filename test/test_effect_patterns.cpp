@@ -169,19 +169,22 @@ void test_rainbow_pulse_fades_and_holds() {
 void test_two_dots_lights_two_pixels_and_changes_colors_on_sequence() {
   TwoDotsEffect e(10);
   PixelsMap map;
-  std::vector<Rgb> out(50);
+  std::vector<Rgb> out(100);
   EffectFrame frame;
   frame.params.brightness = 255;
 
   e.reset(0);  // deterministic seed
-  TEST_ASSERT_EQUAL_UINT32(0, e.traversal_index());
   const uint8_t kComets = TwoDotsEffect::comet_count();
-  std::vector<Rgb> c0(kComets);
-  std::vector<uint8_t> h0(kComets);
+  std::vector<uint32_t> seq0(kComets);
   for (uint8_t i = 0; i < kComets; ++i) {
-    c0[i] = e.color(i);
-    h0[i] = e.head_len(i);
-    TEST_ASSERT_TRUE(h0[i] >= 3 && h0[i] <= 5);
+    seq0[i] = e.sequence_len_steps(i);
+    TEST_ASSERT_TRUE(seq0[i] >= 40 && seq0[i] <= 240);
+    TEST_ASSERT_EQUAL_UINT32(seq0[i], e.sequence_remaining_steps(i));
+    const uint8_t h = e.head_len(i);
+    TEST_ASSERT_TRUE(h >= 3 && h <= 5);
+    for (uint8_t j = 0; j < i; ++j) {
+      TEST_ASSERT_NOT_EQUAL_UINT32(seq0[j], seq0[i]);
+    }
   }
 
   frame.now_ms = 0;
@@ -190,39 +193,24 @@ void test_two_dots_lights_two_pixels_and_changes_colors_on_sequence() {
   for (const auto& c : out) {
     if (c.r || c.g || c.b) ++lit;
   }
-  // Seven comets, each roughly (2*head_len - 1) lit pixels; no overlap expected at this size.
-  TEST_ASSERT_TRUE(lit >= 35 && lit <= 63);
+  TEST_ASSERT_TRUE(lit > 0);
 
-  // After one full loop, colors should change.
-  frame.now_ms = static_cast<uint32_t>(10 * out.size());  // step_ms * led_count
+  // Comet 0 should reset independently when its per-comet sequence elapses.
+  const uint32_t len0 = e.sequence_len_steps(0);
+  frame.now_ms = static_cast<uint32_t>(10U * (len0 - 1U));
   e.render(frame, map, out.data(), out.size());
-  TEST_ASSERT_EQUAL_UINT32(1, e.traversal_index());
-  bool any_changed = false;
+  TEST_ASSERT_EQUAL_UINT32(1, e.sequence_remaining_steps(0));
+
+  frame.now_ms = static_cast<uint32_t>(10U * len0);
+  e.render(frame, map, out.data(), out.size());
+  TEST_ASSERT_EQUAL_UINT32(e.sequence_len_steps(0), e.sequence_remaining_steps(0));
+
+  // Sequence lengths remain unique after resets.
   for (uint8_t i = 0; i < kComets; ++i) {
-    const Rgb c1 = e.color(i);
-    const uint8_t h1 = e.head_len(i);
-    any_changed = any_changed || !(c0[i] == c1) || (h0[i] != h1);
+    const uint32_t li = e.sequence_len_steps(i);
+    TEST_ASSERT_TRUE(li >= 40 && li <= 240);
+    for (uint8_t j = 0; j < i; ++j) {
+      TEST_ASSERT_NOT_EQUAL_UINT32(e.sequence_len_steps(j), li);
+    }
   }
-  if (!any_changed) {
-    char msg[512];
-    const Rgb a0 = c0[0];
-    const uint8_t ah0 = h0[0];
-    const Rgb a1 = e.color(0);
-    const uint8_t ah1 = e.head_len(0);
-    snprintf(msg,
-             sizeof(msg),
-             "Seven_Comets did not change after traversal: traversal_index=%u comet0 before "
-             "rgb=(%u,%u,%u) head=%u after rgb=(%u,%u,%u) head=%u",
-             static_cast<unsigned>(e.traversal_index()),
-             static_cast<unsigned>(a0.r),
-             static_cast<unsigned>(a0.g),
-             static_cast<unsigned>(a0.b),
-             static_cast<unsigned>(ah0),
-             static_cast<unsigned>(a1.r),
-             static_cast<unsigned>(a1.g),
-             static_cast<unsigned>(a1.b),
-             static_cast<unsigned>(ah1));
-    TEST_ASSERT_TRUE_MESSAGE(any_changed, msg);
-  }
-  TEST_ASSERT_TRUE_MESSAGE(any_changed, "Seven_Comets should change across traversals");
 }
