@@ -656,7 +656,7 @@ Proof-of-life:
 Status: 🟢 Done
 
 What was done:
-- Added a compile-time hardware brightness ceiling (`src/core/brightness_config.h`) starting at 20%.
+- Added a compile-time hardware brightness ceiling (`src/core/brightness_config.h`) starting at 50%.
 - Stored brightness remains a persisted “soft” 0..100% value; `+`/`-` still step soft brightness by 10%, but effective output is scaled by the ceiling (e.g., ceiling=30% ⇒ each step is 3% of hardware max).
 - Serial output now shows `soft_brightness_pct`, `hw_ceiling_pct`, and `effective_brightness_pct`.
 
