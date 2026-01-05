@@ -563,3 +563,47 @@ Proof-of-life:
 - Full generator: `leds=560 width=169 height=112 holes=18368`
 - Bench generator: `leds=154 width=56 height=98 holes=5334`
 - `pio test -e native`: PASSED (7 test cases)
+
+### 2026-01-05 — Milestone 3: portable effects core scaffolding (scheduler/params/signals/registry)
+
+Status: 🟡 In progress
+
+What was done:
+- Added portable core scaffolding for Milestone 3:
+  - `EffectParams` baseline parameter model
+  - `Signals`/`ModulationInputs` structs + `ModulationProvider` stub (`NullModulationProvider`)
+  - `FrameScheduler` with runtime `target_fps` (0 = uncapped) and deterministic rounding
+  - `EffectRegistry` for effect lookup/selection by id
+- Updated core validation patterns to accept a unified `EffectFrame` (time in, pixels out) while remaining Arduino-free.
+- Added native unit tests covering the scheduler rounding behavior and registry invariants.
+
+Files touched:
+- src/core/effects/effect.h
+- src/core/effects/pattern_index_walk.h
+- src/core/effects/pattern_xy_scan.h
+- src/core/effects/pattern_coord_color.h
+- src/core/effects/effect_params.h
+- src/core/effects/signals.h
+- src/core/effects/modulation_provider.h
+- src/core/effects/frame_scheduler.h
+- src/core/effects/effect_registry.h
+- test/test_main.cpp
+- test/test_frame_scheduler.cpp
+- test/test_effect_registry.cpp
+- src/main_runtime.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (11 test cases)
+- `pio run -e runtime`: SUCCESS
+
+### 2026-01-05 — Milestone 3 COMPLETE — scheduler + params/signals + validation patterns remain portable
+
+Status: 🟢 Done
+
+What was verified:
+- `core/` remains Arduino-free and compiles under host tests.
+- Scheduler/registry behaviors are covered by deterministic unit tests.
+
+Proof-of-life:
+- `pio test -e native`: PASSED (11 test cases)

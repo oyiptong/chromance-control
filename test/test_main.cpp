@@ -10,6 +10,12 @@ void test_strip_sm_segment_order_flash_counts();
 void test_strip_sm_done_after_last_segment();
 void test_pattern_phase_sequence_and_restart();
 
+void test_frame_scheduler_uncapped();
+void test_frame_scheduler_50fps_fixed_interval();
+void test_frame_scheduler_60fps_deterministic_rounding();
+
+void test_effect_registry_add_find_and_capacity();
+
 int main(int argc, char** argv) {
   (void)argc;
   (void)argv;
@@ -25,6 +31,12 @@ int main(int argc, char** argv) {
   RUN_TEST(test_strip_sm_segment_order_flash_counts);
   RUN_TEST(test_strip_sm_done_after_last_segment);
   RUN_TEST(test_pattern_phase_sequence_and_restart);
+
+  RUN_TEST(test_frame_scheduler_uncapped);
+  RUN_TEST(test_frame_scheduler_50fps_fixed_interval);
+  RUN_TEST(test_frame_scheduler_60fps_deterministic_rounding);
+
+  RUN_TEST(test_effect_registry_add_find_and_capacity);
 
   return UNITY_END();
 }

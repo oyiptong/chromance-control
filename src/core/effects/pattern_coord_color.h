@@ -14,23 +14,31 @@ class CoordColorEffect final : public IEffect {
 
   void reset(uint32_t /*now_ms*/) override {}
 
-  void render(uint32_t /*now_ms*/, const PixelsMap& map, Rgb* out_rgb, size_t led_count) override {
+  void render(const EffectFrame& frame,
+              const PixelsMap& map,
+              Rgb* out_rgb,
+              size_t led_count) override {
     if (out_rgb == nullptr || led_count == 0) {
       return;
     }
 
     const int32_t w = static_cast<int32_t>(map.width());
     const int32_t h = static_cast<int32_t>(map.height());
+    const uint16_t brightness = frame.params.brightness;
 
     for (uint16_t i = 0; i < led_count; ++i) {
       const PixelCoord c = map.coord(i);
-      const uint8_t r = normalize_0_255(c.x, w);
-      const uint8_t g = normalize_0_255(c.y, h);
+      const uint8_t r = scale_0_255(normalize_0_255(c.x, w), brightness);
+      const uint8_t g = scale_0_255(normalize_0_255(c.y, h), brightness);
       out_rgb[i] = Rgb{r, g, 0};
     }
   }
 
  private:
+  static uint8_t scale_0_255(uint8_t v, uint16_t brightness) {
+    return static_cast<uint8_t>((static_cast<uint16_t>(v) * brightness) / 255U);
+  }
+
   static uint8_t normalize_0_255(int16_t v, int32_t span) {
     if (span <= 1) {
       return 0;
@@ -44,4 +52,3 @@ class CoordColorEffect final : public IEffect {
 
 }  // namespace core
 }  // namespace chromance
-

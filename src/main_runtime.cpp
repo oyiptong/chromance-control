@@ -3,6 +3,8 @@
 #include "core/effects/pattern_coord_color.h"
 #include "core/effects/pattern_index_walk.h"
 #include "core/effects/pattern_xy_scan.h"
+#include "core/effects/frame_scheduler.h"
+#include "core/effects/modulation_provider.h"
 #include "core/mapping/mapping_tables.h"
 #include "core/mapping/pixels_map.h"
 #include "platform/led/dotstar_output.h"
@@ -25,6 +27,9 @@ chromance::core::IndexWalkEffect index_walk{25};
 chromance::core::XyScanEffect xy_scan{scan_order, kLedCount, 25};
 chromance::core::CoordColorEffect coord_color;
 chromance::core::IEffect* current_effect = &index_walk;
+
+chromance::core::FrameScheduler scheduler{50};  // 20ms default
+chromance::core::NullModulationProvider modulation;
 
 uint32_t last_render_ms = 0;
 uint32_t last_stats_ms = 0;
@@ -60,6 +65,7 @@ void setup() {
 
   led_out.begin();
   ota.begin(kFirmwareVersion);
+  scheduler.reset(millis());
 
   Serial.println("Commands: 1=Index_Walk_Test 2=XY_Scan_Test 3=Coord_Color_Test");
   select_effect(&index_walk);
@@ -77,13 +83,18 @@ void loop() {
   }
 
   const uint32_t frame_ms = ota.is_updating() ? 100 : 20;
-  if (static_cast<int32_t>(now_ms - last_render_ms) < static_cast<int32_t>(frame_ms)) {
-    return;
-  }
+  scheduler.set_target_fps(frame_ms ? static_cast<uint16_t>(1000U / frame_ms) : 0);
+  if (!scheduler.should_render(now_ms)) return;
   last_render_ms = now_ms;
 
   chromance::platform::PerfStats stats{0, 0};
-  current_effect->render(now_ms, pixels_map, rgb, kLedCount);
+  chromance::core::Signals signals;
+  modulation.get_signals(now_ms, &signals);
+  chromance::core::EffectFrame frame;
+  frame.now_ms = now_ms;
+  frame.dt_ms = scheduler.dt_ms();
+  frame.signals = signals;
+  current_effect->render(frame, pixels_map, rgb, kLedCount);
   const uint32_t frame_start_ms = millis();
   led_out.show(rgb, kLedCount, &stats);
   stats.frame_ms = millis() - frame_start_ms;

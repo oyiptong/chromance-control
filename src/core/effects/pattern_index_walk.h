@@ -16,7 +16,10 @@ class IndexWalkEffect final : public IEffect {
 
   void reset(uint32_t now_ms) override { start_ms_ = now_ms; }
 
-  void render(uint32_t now_ms, const PixelsMap& /*map*/, Rgb* out_rgb, size_t led_count) override {
+  void render(const EffectFrame& frame,
+              const PixelsMap& /*map*/,
+              Rgb* out_rgb,
+              size_t led_count) override {
     if (out_rgb == nullptr || led_count == 0) {
       return;
     }
@@ -25,10 +28,11 @@ class IndexWalkEffect final : public IEffect {
       out_rgb[i] = kBlack;
     }
 
-    const uint32_t elapsed = now_ms - start_ms_;
+    const uint32_t elapsed = frame.now_ms - start_ms_;
     const uint32_t step = hold_ms_ ? (elapsed / hold_ms_) : elapsed;
     const size_t idx = static_cast<size_t>(step % led_count);
-    out_rgb[idx] = Rgb{255, 255, 255};
+    const uint8_t v = frame.params.brightness;
+    out_rgb[idx] = Rgb{v, v, v};
   }
 
  private:
@@ -38,4 +42,3 @@ class IndexWalkEffect final : public IEffect {
 
 }  // namespace core
 }  // namespace chromance
-
