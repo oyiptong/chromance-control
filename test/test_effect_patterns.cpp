@@ -4,6 +4,8 @@
 
 #include "core/effects/pattern_coord_color.h"
 #include "core/effects/pattern_index_walk.h"
+#include "core/effects/pattern_rainbow_pulse.h"
+#include "core/effects/pattern_two_dots.h"
 #include "core/effects/pattern_xy_scan.h"
 #include "core/mapping/pixels_map.h"
 
@@ -11,7 +13,9 @@ using chromance::core::CoordColorEffect;
 using chromance::core::EffectFrame;
 using chromance::core::IndexWalkEffect;
 using chromance::core::PixelsMap;
+using chromance::core::RainbowPulseEffect;
 using chromance::core::Rgb;
+using chromance::core::TwoDotsEffect;
 using chromance::core::XyScanEffect;
 using chromance::core::kBlack;
 
@@ -131,3 +135,59 @@ void test_coord_color_effect_matches_expected_formula_and_scales_brightness() {
       out_dim[sample].g);
 }
 
+void test_rainbow_pulse_fades_and_holds() {
+  RainbowPulseEffect e(700, 2000, 700);
+  PixelsMap map;
+  std::vector<Rgb> out(10);
+  EffectFrame frame;
+  frame.params.brightness = 255;
+  e.reset(0);
+
+  // Start: black.
+  frame.now_ms = 0;
+  e.render(frame, map, out.data(), out.size());
+  TEST_ASSERT_EQUAL_UINT8(0, out[0].r + out[0].g + out[0].b);
+
+  // Mid fade-in: non-black.
+  frame.now_ms = 350;
+  e.render(frame, map, out.data(), out.size());
+  TEST_ASSERT_TRUE(out[0].r || out[0].g || out[0].b);
+
+  // Hold: still non-black.
+  frame.now_ms = 800;  // after fade-in
+  e.render(frame, map, out.data(), out.size());
+  TEST_ASSERT_TRUE(out[0].r || out[0].g || out[0].b);
+
+  // End of cycle: back to black.
+  frame.now_ms = 3400;
+  e.render(frame, map, out.data(), out.size());
+  TEST_ASSERT_EQUAL_UINT8(0, out[0].r + out[0].g + out[0].b);
+}
+
+void test_two_dots_lights_two_pixels_and_changes_colors_on_sequence() {
+  TwoDotsEffect e(10);
+  PixelsMap map;
+  std::vector<Rgb> out(10);
+  EffectFrame frame;
+  frame.params.brightness = 255;
+
+  e.reset(0);  // deterministic seed
+  const Rgb a0 = e.color_a();
+  const Rgb b0 = e.color_b();
+
+  frame.now_ms = 0;
+  e.render(frame, map, out.data(), out.size());
+  size_t lit = 0;
+  for (const auto& c : out) {
+    if (c.r || c.g || c.b) ++lit;
+  }
+  TEST_ASSERT_EQUAL_UINT32(2, static_cast<uint32_t>(lit));
+
+  // After one full loop, colors should change.
+  frame.now_ms = 10 * 10;  // step_ms * led_count
+  e.render(frame, map, out.data(), out.size());
+  const Rgb a1 = e.color_a();
+  const Rgb b1 = e.color_b();
+  const bool changed = !(a0 == a1 && b0 == b1);
+  TEST_ASSERT_TRUE(changed);
+}

@@ -4,6 +4,8 @@
 #include "core/brightness_config.h"
 #include "core/effects/pattern_coord_color.h"
 #include "core/effects/pattern_index_walk.h"
+#include "core/effects/pattern_rainbow_pulse.h"
+#include "core/effects/pattern_two_dots.h"
 #include "core/effects/pattern_xy_scan.h"
 #include "core/effects/frame_scheduler.h"
 #include "core/effects/modulation_provider.h"
@@ -32,6 +34,8 @@ chromance::core::EffectParams params;
 chromance::core::IndexWalkEffect index_walk{25};
 chromance::core::XyScanEffect xy_scan{scan_order, kLedCount, 25};
 chromance::core::CoordColorEffect coord_color;
+chromance::core::RainbowPulseEffect rainbow_pulse{700, 2000, 700};
+chromance::core::TwoDotsEffect two_dots{25};
 chromance::core::IEffect* current_effect = &index_walk;
 
 chromance::core::FrameScheduler scheduler{50};  // 20ms default
@@ -99,7 +103,8 @@ void setup() {
   params.brightness = chromance::core::soft_percent_to_u8_255(
       settings.brightness_percent(), chromance::core::kHardwareBrightnessCeilingPercent);
 
-  Serial.println("Commands: 1=Index_Walk_Test 2=XY_Scan_Test 3=Coord_Color_Test +=brightness_up -=brightness_down");
+  Serial.println(
+      "Commands: 1=Index_Walk_Test 2=XY_Scan_Test 3=Coord_Color_Test 4=Rainbow_Pulse 5=Two_Dots +=brightness_up -=brightness_down");
   print_brightness();
   select_effect(&index_walk);
 }
@@ -113,6 +118,8 @@ void loop() {
     if (c == '1') select_effect(&index_walk);
     if (c == '2') select_effect(&xy_scan);
     if (c == '3') select_effect(&coord_color);
+    if (c == '4') select_effect(&rainbow_pulse);
+    if (c == '5') select_effect(&two_dots);
     if (c == '+') {
       set_brightness_percent(
           chromance::core::brightness_step_up_10(settings.brightness_percent()));

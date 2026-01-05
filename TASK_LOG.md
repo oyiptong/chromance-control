@@ -691,3 +691,25 @@ Files touched:
 Proof-of-life:
 - `pio run -e runtime`: SUCCESS
 - `pio run -e runtime_bench`: SUCCESS
+
+### 2026-01-05 — Runtime: add patterns 4/5 (Rainbow_Pulse, Two_Dots)
+
+Status: 🟢 Done
+
+What was done:
+- Added two additional runtime-selectable patterns:
+  - `4=Rainbow_Pulse`: full display, rainbow color steps with fade-in (0.7s), hold (2.0s), fade-out (0.7s).
+  - `5=Two_Dots`: two moving dots with randomly chosen colors that change after a full traversal.
+- Added native unit tests for both patterns.
+
+Files touched:
+- src/core/effects/pattern_rainbow_pulse.h
+- src/core/effects/pattern_two_dots.h
+- src/main_runtime.cpp
+- test/test_effect_patterns.cpp
+- test/test_main.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (31 test cases)
+- `pio run -e runtime`: SUCCESS
