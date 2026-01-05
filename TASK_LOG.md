@@ -713,3 +713,24 @@ Files touched:
 Proof-of-life:
 - `pio test -e native`: PASSED (31 test cases)
 - `pio run -e runtime`: SUCCESS
+
+### 2026-01-05 — Runtime: persist selected mode (pattern) across reboot
+
+Status: 🟢 Done
+
+What was done:
+- Persisted the selected runtime mode (keys `1..5`) in ESP32 NVS (`Preferences`) and restored it on boot.
+- Safety: stored values are sanitized; if invalid/unrecognized, firmware falls back to mode `1` (`Index_Walk_Test`) and writes the sanitized value back.
+
+Files touched:
+- src/core/settings/mode_setting.h
+- src/platform/settings.h
+- src/platform/settings.cpp
+- src/main_runtime.cpp
+- test/test_mode_setting.cpp
+- test/test_main.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (35 test cases)
+- `pio run -e runtime`: SUCCESS

@@ -42,6 +42,11 @@ void test_two_dots_lights_two_pixels_and_changes_colors_on_sequence();
 
 void test_null_modulation_provider_returns_defaults();
 
+void test_mode_setting_sanitizes_values();
+void test_mode_setting_begin_reads_and_writes_back_sanitized();
+void test_mode_setting_begin_uses_default_when_missing();
+void test_mode_setting_set_mode_persists_sanitized();
+
 int main(int argc, char** argv) {
   (void)argc;
   (void)argv;
@@ -89,6 +94,11 @@ int main(int argc, char** argv) {
   RUN_TEST(test_two_dots_lights_two_pixels_and_changes_colors_on_sequence);
 
   RUN_TEST(test_null_modulation_provider_returns_defaults);
+
+  RUN_TEST(test_mode_setting_sanitizes_values);
+  RUN_TEST(test_mode_setting_begin_reads_and_writes_back_sanitized);
+  RUN_TEST(test_mode_setting_begin_uses_default_when_missing);
+  RUN_TEST(test_mode_setting_set_mode_persists_sanitized);
 
   return UNITY_END();
 }

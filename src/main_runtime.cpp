@@ -37,6 +37,7 @@ chromance::core::CoordColorEffect coord_color;
 chromance::core::RainbowPulseEffect rainbow_pulse{700, 2000, 700};
 chromance::core::TwoDotsEffect two_dots{25};
 chromance::core::IEffect* current_effect = &index_walk;
+uint8_t current_mode = 1;
 
 chromance::core::FrameScheduler scheduler{50};  // 20ms default
 chromance::core::NullModulationProvider modulation;
@@ -67,14 +68,43 @@ void set_brightness_percent(uint8_t percent) {
   print_brightness();
 }
 
-void select_effect(chromance::core::IEffect* effect) {
-  if (effect == nullptr) {
-    return;
+void select_mode(uint8_t mode) {
+  const uint8_t safe_mode = chromance::core::ModeSetting::sanitize(mode);
+  settings.set_mode(safe_mode);
+
+  chromance::core::IEffect* effect = nullptr;
+  switch (safe_mode) {
+    case 1:
+      effect = &index_walk;
+      break;
+    case 2:
+      effect = &xy_scan;
+      break;
+    case 3:
+      effect = &coord_color;
+      break;
+    case 4:
+      effect = &rainbow_pulse;
+      break;
+    case 5:
+      effect = &two_dots;
+      break;
+    default:
+      effect = &index_walk;
+      break;
   }
+
+  if (effect == nullptr) {
+    effect = &index_walk;
+  }
+
+  current_mode = safe_mode;
   current_effect = effect;
   current_effect->reset(millis());
   last_banner_led = 0xFFFF;
-  Serial.print("Mode: ");
+  Serial.print("Mode ");
+  Serial.print(static_cast<unsigned>(current_mode));
+  Serial.print(": ");
   Serial.println(current_effect->id());
 }
 
@@ -105,8 +135,10 @@ void setup() {
 
   Serial.println(
       "Commands: 1=Index_Walk_Test 2=XY_Scan_Test 3=Coord_Color_Test 4=Rainbow_Pulse 5=Two_Dots +=brightness_up -=brightness_down");
+  Serial.print("Restored mode: ");
+  Serial.println(static_cast<unsigned>(settings.mode()));
   print_brightness();
-  select_effect(&index_walk);
+  select_mode(settings.mode());
 }
 
 void loop() {
@@ -115,11 +147,11 @@ void loop() {
 
   while (Serial.available() > 0) {
     const int c = Serial.read();
-    if (c == '1') select_effect(&index_walk);
-    if (c == '2') select_effect(&xy_scan);
-    if (c == '3') select_effect(&coord_color);
-    if (c == '4') select_effect(&rainbow_pulse);
-    if (c == '5') select_effect(&two_dots);
+    if (c == '1') select_mode(1);
+    if (c == '2') select_mode(2);
+    if (c == '3') select_mode(3);
+    if (c == '4') select_mode(4);
+    if (c == '5') select_mode(5);
     if (c == '+') {
       set_brightness_percent(
           chromance::core::brightness_step_up_10(settings.brightness_percent()));
@@ -197,6 +229,9 @@ void loop() {
     const uint8_t ceiling = chromance::core::kHardwareBrightnessCeilingPercent;
     const uint8_t effective = chromance::core::soft_percent_to_hw_percent(soft, ceiling);
 
+    Serial.print("mode=");
+    Serial.print(static_cast<unsigned>(current_mode));
+    Serial.print(" ");
     Serial.print("soft_brightness_pct=");
     Serial.print(static_cast<unsigned>(soft));
     Serial.print(" hw_ceiling_pct=");

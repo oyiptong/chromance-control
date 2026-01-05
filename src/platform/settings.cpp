@@ -9,6 +9,7 @@ namespace {
 
 constexpr char kNamespace[] = "chromance";
 constexpr char kBrightnessKey[] = "bright_pct";
+constexpr char kModeKey[] = "mode";
 
 class PreferencesStore final : public chromance::core::IKeyValueStore {
  public:
@@ -44,11 +45,17 @@ void RuntimeSettings::begin() {
   prefs.begin(kNamespace, false);
   PreferencesStore store(&prefs);
   brightness_.begin(store, kBrightnessKey, 100);
+  mode_.begin(store, kModeKey, 1);
 }
 
 void RuntimeSettings::set_brightness_percent(uint8_t percent) {
   PreferencesStore store(&prefs);
   brightness_.set_percent(store, kBrightnessKey, percent);
+}
+
+void RuntimeSettings::set_mode(uint8_t mode) {
+  PreferencesStore store(&prefs);
+  mode_.set_mode(store, kModeKey, mode);
 }
 
 }  // namespace platform
