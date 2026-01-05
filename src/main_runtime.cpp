@@ -134,7 +134,7 @@ void setup() {
       settings.brightness_percent(), chromance::core::kHardwareBrightnessCeilingPercent);
 
   Serial.println(
-      "Commands: 1=Index_Walk_Test 2=XY_Scan_Test 3=Coord_Color_Test 4=Rainbow_Pulse 5=Two_Dots +=brightness_up -=brightness_down");
+      "Commands: 1=Index_Walk_Test 2=XY_Scan_Test 3=Coord_Color_Test 4=Rainbow_Pulse 5=Seven_Comets +=brightness_up -=brightness_down");
   Serial.print("Restored mode: ");
   Serial.println(static_cast<unsigned>(settings.mode()));
   print_brightness();

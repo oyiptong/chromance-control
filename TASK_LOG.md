@@ -733,6 +733,24 @@ Proof-of-life:
 - `pio test -e native`: PASSED (35 test cases)
 - `pio run -e runtime`: SUCCESS
 
+### 2026-01-05 — Runtime: mode 5 “Seven_Comets” (was Two_Comets)
+
+Status: 🟢 Done
+
+What was done:
+- Expanded mode 5 from 2 comets → 7 comets, evenly distributed across the index ring with alternating direction.
+- Each comet has a randomized head length (`3..5`) with a matching linear fading tail; colors/head lengths change each traversal.
+
+Files touched:
+- src/core/effects/pattern_two_dots.h
+- src/main_runtime.cpp
+- test/test_effect_patterns.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (35 test cases)
+- `pio run -e runtime`: SUCCESS
+
 ### 2026-01-05 — Runtime: persist selected mode (pattern) across reboot
 
 Status: 🟢 Done

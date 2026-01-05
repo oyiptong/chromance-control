@@ -2,6 +2,8 @@
 
 #include <unity.h>
 
+#include <stdio.h>
+
 #include "core/effects/pattern_coord_color.h"
 #include "core/effects/pattern_index_walk.h"
 #include "core/effects/pattern_rainbow_pulse.h"
@@ -172,10 +174,15 @@ void test_two_dots_lights_two_pixels_and_changes_colors_on_sequence() {
   frame.params.brightness = 255;
 
   e.reset(0);  // deterministic seed
-  const Rgb a0 = e.color_a();
-  const Rgb b0 = e.color_b();
-  const uint8_t head0 = e.head_len();
-  TEST_ASSERT_TRUE(head0 >= 3 && head0 <= 5);
+  TEST_ASSERT_EQUAL_UINT32(0, e.traversal_index());
+  const uint8_t kComets = TwoDotsEffect::comet_count();
+  std::vector<Rgb> c0(kComets);
+  std::vector<uint8_t> h0(kComets);
+  for (uint8_t i = 0; i < kComets; ++i) {
+    c0[i] = e.color(i);
+    h0[i] = e.head_len(i);
+    TEST_ASSERT_TRUE(h0[i] >= 3 && h0[i] <= 5);
+  }
 
   frame.now_ms = 0;
   e.render(frame, map, out.data(), out.size());
@@ -183,14 +190,39 @@ void test_two_dots_lights_two_pixels_and_changes_colors_on_sequence() {
   for (const auto& c : out) {
     if (c.r || c.g || c.b) ++lit;
   }
-  // Two comets, each roughly (2*head_len - 1) lit pixels; no overlap expected at this size.
-  TEST_ASSERT_TRUE(lit >= 10 && lit <= 18);
+  // Seven comets, each roughly (2*head_len - 1) lit pixels; no overlap expected at this size.
+  TEST_ASSERT_TRUE(lit >= 35 && lit <= 63);
 
   // After one full loop, colors should change.
   frame.now_ms = static_cast<uint32_t>(10 * out.size());  // step_ms * led_count
   e.render(frame, map, out.data(), out.size());
-  const Rgb a1 = e.color_a();
-  const Rgb b1 = e.color_b();
-  const bool changed = !(a0 == a1 && b0 == b1);
-  TEST_ASSERT_TRUE(changed);
+  TEST_ASSERT_EQUAL_UINT32(1, e.traversal_index());
+  bool any_changed = false;
+  for (uint8_t i = 0; i < kComets; ++i) {
+    const Rgb c1 = e.color(i);
+    const uint8_t h1 = e.head_len(i);
+    any_changed = any_changed || !(c0[i] == c1) || (h0[i] != h1);
+  }
+  if (!any_changed) {
+    char msg[512];
+    const Rgb a0 = c0[0];
+    const uint8_t ah0 = h0[0];
+    const Rgb a1 = e.color(0);
+    const uint8_t ah1 = e.head_len(0);
+    snprintf(msg,
+             sizeof(msg),
+             "Seven_Comets did not change after traversal: traversal_index=%u comet0 before "
+             "rgb=(%u,%u,%u) head=%u after rgb=(%u,%u,%u) head=%u",
+             static_cast<unsigned>(e.traversal_index()),
+             static_cast<unsigned>(a0.r),
+             static_cast<unsigned>(a0.g),
+             static_cast<unsigned>(a0.b),
+             static_cast<unsigned>(ah0),
+             static_cast<unsigned>(a1.r),
+             static_cast<unsigned>(a1.g),
+             static_cast<unsigned>(a1.b),
+             static_cast<unsigned>(ah1));
+    TEST_ASSERT_TRUE_MESSAGE(any_changed, msg);
+  }
+  TEST_ASSERT_TRUE_MESSAGE(any_changed, "Seven_Comets should change across traversals");
 }
