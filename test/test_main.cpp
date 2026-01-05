@@ -20,6 +20,7 @@ void test_brightness_clamp_percent();
 void test_brightness_quantize_to_10_rounding();
 void test_brightness_step_up_down_10();
 void test_brightness_percent_to_u8_255();
+void test_brightness_soft_percent_applies_ceiling();
 
 void test_brightness_setting_begin_default_and_persists_quantized();
 void test_brightness_setting_begin_reads_existing_and_writes_back_quantized();
@@ -65,6 +66,7 @@ int main(int argc, char** argv) {
   RUN_TEST(test_brightness_quantize_to_10_rounding);
   RUN_TEST(test_brightness_step_up_down_10);
   RUN_TEST(test_brightness_percent_to_u8_255);
+  RUN_TEST(test_brightness_soft_percent_applies_ceiling);
 
   RUN_TEST(test_brightness_setting_begin_default_and_persists_quantized);
   RUN_TEST(test_brightness_setting_begin_reads_existing_and_writes_back_quantized);

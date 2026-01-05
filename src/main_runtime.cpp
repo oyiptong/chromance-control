@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
 #include "core/brightness.h"
+#include "core/brightness_config.h"
 #include "core/effects/pattern_coord_color.h"
 #include "core/effects/pattern_index_walk.h"
 #include "core/effects/pattern_xy_scan.h"
@@ -42,14 +43,23 @@ uint16_t last_banner_led = 0xFFFF;
 uint32_t last_banner_ms = 0;
 
 void print_brightness() {
+  const uint8_t soft = settings.brightness_percent();
+  const uint8_t ceiling = chromance::core::kHardwareBrightnessCeilingPercent;
+  const uint8_t effective = chromance::core::soft_percent_to_hw_percent(soft, ceiling);
+
   Serial.print("Brightness: ");
-  Serial.print(static_cast<unsigned>(settings.brightness_percent()));
-  Serial.println("% (+/- to change, persisted)");
+  Serial.print(static_cast<unsigned>(soft));
+  Serial.print("% (ceiling=");
+  Serial.print(static_cast<unsigned>(ceiling));
+  Serial.print("%, effective=");
+  Serial.print(static_cast<unsigned>(effective));
+  Serial.println("%) (+/- moves 10% of ceiling, persisted)");
 }
 
 void set_brightness_percent(uint8_t percent) {
   settings.set_brightness_percent(percent);
-  params.brightness = chromance::core::percent_to_u8_255(settings.brightness_percent());
+  params.brightness = chromance::core::soft_percent_to_u8_255(
+      settings.brightness_percent(), chromance::core::kHardwareBrightnessCeilingPercent);
   print_brightness();
 }
 
@@ -86,7 +96,8 @@ void setup() {
 
   settings.begin();
   params = chromance::core::EffectParams{};
-  params.brightness = chromance::core::percent_to_u8_255(settings.brightness_percent());
+  params.brightness = chromance::core::soft_percent_to_u8_255(
+      settings.brightness_percent(), chromance::core::kHardwareBrightnessCeilingPercent);
 
   Serial.println("Commands: 1=Index_Walk_Test 2=XY_Scan_Test 3=Coord_Color_Test +=brightness_up -=brightness_down");
   print_brightness();
@@ -175,8 +186,16 @@ void loop() {
 
   if (static_cast<int32_t>(now_ms - last_stats_ms) >= 1000) {
     last_stats_ms = now_ms;
-    Serial.print("brightness_pct=");
-    Serial.print(static_cast<unsigned>(settings.brightness_percent()));
+    const uint8_t soft = settings.brightness_percent();
+    const uint8_t ceiling = chromance::core::kHardwareBrightnessCeilingPercent;
+    const uint8_t effective = chromance::core::soft_percent_to_hw_percent(soft, ceiling);
+
+    Serial.print("soft_brightness_pct=");
+    Serial.print(static_cast<unsigned>(soft));
+    Serial.print(" hw_ceiling_pct=");
+    Serial.print(static_cast<unsigned>(ceiling));
+    Serial.print(" effective_brightness_pct=");
+    Serial.print(static_cast<unsigned>(effective));
     Serial.print(" ");
     Serial.print("flush_ms=");
     Serial.print(stats.flush_ms);

@@ -6,6 +6,8 @@ using chromance::core::brightness_step_down_10;
 using chromance::core::brightness_step_up_10;
 using chromance::core::clamp_percent_0_100;
 using chromance::core::percent_to_u8_255;
+using chromance::core::soft_percent_to_hw_percent;
+using chromance::core::soft_percent_to_u8_255;
 using chromance::core::quantize_percent_to_10;
 
 void test_brightness_clamp_percent() {
@@ -52,3 +54,20 @@ void test_brightness_percent_to_u8_255() {
   TEST_ASSERT_EQUAL_UINT8(255, percent_to_u8_255(255));
 }
 
+void test_brightness_soft_percent_applies_ceiling() {
+  // Ceiling=30% => each 10% soft step is 3% effective.
+  TEST_ASSERT_EQUAL_UINT8(0, soft_percent_to_hw_percent(0, 30));
+  TEST_ASSERT_EQUAL_UINT8(3, soft_percent_to_hw_percent(10, 30));
+  TEST_ASSERT_EQUAL_UINT8(6, soft_percent_to_hw_percent(20, 30));
+  TEST_ASSERT_EQUAL_UINT8(30, soft_percent_to_hw_percent(100, 30));
+
+  // Clamping works for both inputs.
+  TEST_ASSERT_EQUAL_UINT8(30, soft_percent_to_hw_percent(255, 30));
+  TEST_ASSERT_EQUAL_UINT8(100, soft_percent_to_hw_percent(100, 255));
+
+  // Ceil=0 disables output.
+  TEST_ASSERT_EQUAL_UINT8(0, soft_percent_to_hw_percent(100, 0));
+
+  // u8 mapping is consistent with percent_to_u8_255 on the effective percent.
+  TEST_ASSERT_EQUAL_UINT8(percent_to_u8_255(15), soft_percent_to_u8_255(50, 30));  // 50%*30%=15%
+}

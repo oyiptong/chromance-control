@@ -650,3 +650,24 @@ Files touched:
 
 Proof-of-life:
 - `pio test -e native`: PASSED (28 test cases)
+
+### 2026-01-05 — Runtime: add compile-time brightness ceiling + soft brightness scaling
+
+Status: 🟢 Done
+
+What was done:
+- Added a compile-time hardware brightness ceiling (`src/core/brightness_config.h`) starting at 20%.
+- Stored brightness remains a persisted “soft” 0..100% value; `+`/`-` still step soft brightness by 10%, but effective output is scaled by the ceiling (e.g., ceiling=30% ⇒ each step is 3% of hardware max).
+- Serial output now shows `soft_brightness_pct`, `hw_ceiling_pct`, and `effective_brightness_pct`.
+
+Files touched:
+- src/core/brightness_config.h
+- src/core/brightness.h
+- src/main_runtime.cpp
+- test/test_brightness.cpp
+- test/test_main.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (29 test cases)
+- `pio run -e runtime`: SUCCESS

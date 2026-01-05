@@ -30,5 +30,15 @@ inline uint8_t percent_to_u8_255(uint8_t percent) {
   return static_cast<uint8_t>((p * 255U) / 100U);
 }
 
+inline uint8_t soft_percent_to_hw_percent(uint8_t soft_percent, uint8_t ceiling_percent) {
+  const uint16_t soft = clamp_percent_0_100(soft_percent);
+  const uint16_t ceiling = clamp_percent_0_100(ceiling_percent);
+  return static_cast<uint8_t>((soft * ceiling) / 100U);
+}
+
+inline uint8_t soft_percent_to_u8_255(uint8_t soft_percent, uint8_t ceiling_percent) {
+  return percent_to_u8_255(soft_percent_to_hw_percent(soft_percent, ceiling_percent));
+}
+
 }  // namespace core
 }  // namespace chromance
