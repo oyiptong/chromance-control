@@ -616,13 +616,19 @@ What was done:
 - Added serial `+`/`-` controls to change brightness in 10% increments (clamped 0..100).
 - Persisted brightness percent across reboots using ESP32 NVS (`Preferences`).
 - Included `brightness_pct` in the periodic runtime UART stats line for easier log capture.
+- Refactored brightness logic into portable `core/` and added unit tests covering clamp/quantize/step/percent->255 plus persistence semantics via a fake key-value store.
 
 Files touched:
+- src/core/brightness.h
+- src/core/settings/kv_store.h
+- src/core/settings/brightness_setting.h
 - src/platform/settings.h
 - src/platform/settings.cpp
 - src/main_runtime.cpp
+- test/test_brightness.cpp
+- test/test_brightness_setting.cpp
 - TASK_LOG.md
 
 Proof-of-life:
-- `pio test -e native`: PASSED (11 test cases)
+- `pio test -e native`: PASSED (19 test cases)
 - `pio run -e runtime`: SUCCESS

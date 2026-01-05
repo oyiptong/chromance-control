@@ -1,5 +1,6 @@
 #include <Arduino.h>
 
+#include "core/brightness.h"
 #include "core/effects/pattern_coord_color.h"
 #include "core/effects/pattern_index_walk.h"
 #include "core/effects/pattern_xy_scan.h"
@@ -40,11 +41,6 @@ uint32_t last_stats_ms = 0;
 uint16_t last_banner_led = 0xFFFF;
 uint32_t last_banner_ms = 0;
 
-uint8_t percent_to_255(uint8_t percent) {
-  if (percent > 100) percent = 100;
-  return static_cast<uint8_t>((static_cast<uint16_t>(percent) * 255U) / 100U);
-}
-
 void print_brightness() {
   Serial.print("Brightness: ");
   Serial.print(static_cast<unsigned>(settings.brightness_percent()));
@@ -53,7 +49,7 @@ void print_brightness() {
 
 void set_brightness_percent(uint8_t percent) {
   settings.set_brightness_percent(percent);
-  params.brightness = percent_to_255(settings.brightness_percent());
+  params.brightness = chromance::core::percent_to_u8_255(settings.brightness_percent());
   print_brightness();
 }
 
@@ -90,7 +86,7 @@ void setup() {
 
   settings.begin();
   params = chromance::core::EffectParams{};
-  params.brightness = percent_to_255(settings.brightness_percent());
+  params.brightness = chromance::core::percent_to_u8_255(settings.brightness_percent());
 
   Serial.println("Commands: 1=Index_Walk_Test 2=XY_Scan_Test 3=Coord_Color_Test +=brightness_up -=brightness_down");
   print_brightness();
@@ -107,12 +103,12 @@ void loop() {
     if (c == '2') select_effect(&xy_scan);
     if (c == '3') select_effect(&coord_color);
     if (c == '+') {
-      const uint8_t cur = settings.brightness_percent();
-      set_brightness_percent(static_cast<uint8_t>(cur >= 100 ? 100 : (cur + 10)));
+      set_brightness_percent(
+          chromance::core::brightness_step_up_10(settings.brightness_percent()));
     }
     if (c == '-') {
-      const uint8_t cur = settings.brightness_percent();
-      set_brightness_percent(static_cast<uint8_t>(cur <= 0 ? 0 : (cur - 10)));
+      set_brightness_percent(
+          chromance::core::brightness_step_down_10(settings.brightness_percent()));
     }
   }
 
