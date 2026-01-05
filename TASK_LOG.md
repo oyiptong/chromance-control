@@ -863,6 +863,24 @@ Proof-of-life:
 - `pio run -e runtime`: SUCCESS
 - `pio run -e runtime_bench`: SUCCESS
 
+### 2026-01-05 — Runtime: HRV hexagon smoother fades (eased + dithered)
+
+Status: 🟢 Done
+
+What was done:
+- Updated “HRV hexagon” fades to look smoother by using a 16-bit eased fade curve (smoothstep) plus per-LED spatial dithering instead of a coarse 8-bit linear step.
+- Increased render cadence for mode `6` to ~60fps (`frame_ms=16`) to reduce visible stepping during fades.
+
+Files touched:
+- src/core/effects/pattern_hrv_hexagon.h
+- src/main_runtime.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (38 test cases)
+- `pio run -e runtime`: SUCCESS
+- `pio run -e runtime_bench`: SUCCESS
+
 ### 2026-01-05 — Runtime: mode 5 “Seven_Comets” (was Two_Comets)
 
 Status: 🟢 Done

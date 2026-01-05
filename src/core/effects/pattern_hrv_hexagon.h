@@ -39,18 +39,16 @@ class HrvHexagonEffect final : public IEffect {
     advance_cycles(frame.now_ms);
 
     const uint32_t elapsed = frame.now_ms - cycle_start_ms_;
-    const uint8_t alpha = phase_alpha(elapsed);
-    if (alpha == 0 || current_seg_count_ == 0) return;
+    const uint16_t alpha16 = phase_alpha16(elapsed);
+    if (alpha16 == 0 || current_seg_count_ == 0) return;
 
-    const uint8_t v =
-        static_cast<uint8_t>((static_cast<uint16_t>(alpha) * frame.params.brightness) / 255U);
-    const Rgb c = scale(current_color_, v);
+    const uint16_t scale16 = scale16_from_alpha_and_brightness(alpha16, frame.params.brightness);
 
     for (uint16_t i = 0; i < led_count; ++i) {
       const uint8_t seg = MappingTables::global_to_seg()[i];
       if (seg == 0 || seg > 40) continue;
       if (segment_in_current(seg)) {
-        out_rgb[i] = c;
+        out_rgb[i] = scale_dither(current_color_, scale16, frame.now_ms, i);
       }
     }
   }
@@ -114,6 +112,69 @@ class HrvHexagonEffect final : public IEffect {
     return Rgb{static_cast<uint8_t>((static_cast<uint16_t>(c.r) * v) / 255U),
                static_cast<uint8_t>((static_cast<uint16_t>(c.g) * v) / 255U),
                static_cast<uint8_t>((static_cast<uint16_t>(c.b) * v) / 255U)};
+  }
+
+  static uint16_t smoothstep_u16(uint16_t t) {
+    // 3t^2 - 2t^3, with t in [0,65535].
+    const uint32_t t2 = (static_cast<uint32_t>(t) * t + 0x8000U) >> 16;
+    const uint32_t t3 = (t2 * t + 0x8000U) >> 16;
+    const int32_t y = static_cast<int32_t>(3 * t2) - static_cast<int32_t>(2 * t3);
+    if (y <= 0) return 0;
+    if (y >= 65535) return 65535;
+    return static_cast<uint16_t>(y);
+  }
+
+  static uint16_t phase_alpha16(uint32_t elapsed_ms) {
+    if (elapsed_ms < kFadeInMs) {
+      const uint16_t t = static_cast<uint16_t>((elapsed_ms * 65535U) / kFadeInMs);
+      return smoothstep_u16(t);
+    }
+    elapsed_ms -= kFadeInMs;
+    if (elapsed_ms < kHoldMs) {
+      return 65535;
+    }
+    elapsed_ms -= kHoldMs;
+    if (elapsed_ms < kFadeOutMs) {
+      const uint32_t t_rem = kFadeOutMs - elapsed_ms;
+      const uint16_t t = static_cast<uint16_t>((t_rem * 65535U) / kFadeOutMs);
+      return smoothstep_u16(t);
+    }
+    return 0;
+  }
+
+  static uint16_t scale16_from_alpha_and_brightness(uint16_t alpha16, uint8_t brightness) {
+    // alpha16 (0..65535) * brightness (0..255) -> 0..65535
+    const uint32_t v = static_cast<uint32_t>(alpha16) * static_cast<uint32_t>(brightness);
+    return static_cast<uint16_t>((v + 127U) / 255U);
+  }
+
+  static uint16_t dither16(uint32_t now_ms, uint16_t led_index) {
+    // Simple hash for per-led, per-frame spatial dithering.
+    uint32_t x = now_ms * 2654435761u;
+    x ^= static_cast<uint32_t>(led_index) * 2246822519u;
+    x ^= x >> 16;
+    x *= 3266489917u;
+    x ^= x >> 16;
+    return static_cast<uint16_t>(x);
+  }
+
+  static uint8_t scale_u8_dither(uint8_t base, uint16_t scale16, uint32_t now_ms, uint16_t led_index) {
+    const uint32_t prod = static_cast<uint32_t>(base) * static_cast<uint32_t>(scale16);  // 0..~16M
+    uint8_t out = static_cast<uint8_t>(prod >> 16);  // floor(base*scale16/65536)
+    const uint16_t frac = static_cast<uint16_t>(prod & 0xFFFFu);
+    const uint16_t thr = dither16(now_ms, led_index);
+    if (frac > thr && out < 255) {
+      out = static_cast<uint8_t>(out + 1U);
+    }
+    return out;
+  }
+
+  static Rgb scale_dither(const Rgb& c, uint16_t scale16, uint32_t now_ms, uint16_t led_index) {
+    return Rgb{
+        scale_u8_dither(c.r, scale16, now_ms, led_index ^ 0x1111u),
+        scale_u8_dither(c.g, scale16, now_ms, led_index ^ 0x2222u),
+        scale_u8_dither(c.b, scale16, now_ms, led_index ^ 0x3333u),
+    };
   }
 
   void build_segment_presence() {

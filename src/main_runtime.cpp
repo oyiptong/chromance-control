@@ -250,7 +250,10 @@ void loop() {
     }
   }
 
-  const uint32_t frame_ms = ota.is_updating() ? 100 : 20;
+  uint32_t frame_ms = ota.is_updating() ? 100 : 20;
+  if (current_effect == &hrv_hexagon) {
+    frame_ms = 16;  // smoother fades for mode 6
+  }
   scheduler.set_target_fps(frame_ms ? static_cast<uint16_t>(1000U / frame_ms) : 0);
   if (!scheduler.should_render(now_ms)) return;
   last_render_ms = now_ms;
