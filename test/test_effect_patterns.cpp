@@ -5,18 +5,22 @@
 #include <stdio.h>
 
 #include "core/effects/pattern_coord_color.h"
+#include "core/effects/pattern_hrv_hexagon.h"
 #include "core/effects/pattern_index_walk.h"
 #include "core/effects/pattern_rainbow_pulse.h"
+#include "core/effects/pattern_strip_segment_stepper.h"
 #include "core/effects/pattern_two_dots.h"
 #include "core/effects/pattern_xy_scan.h"
 #include "core/mapping/pixels_map.h"
 
 using chromance::core::CoordColorEffect;
 using chromance::core::EffectFrame;
+using chromance::core::HrvHexagonEffect;
 using chromance::core::IndexWalkEffect;
 using chromance::core::PixelsMap;
 using chromance::core::RainbowPulseEffect;
 using chromance::core::Rgb;
+using chromance::core::StripSegmentStepperEffect;
 using chromance::core::TwoDotsEffect;
 using chromance::core::XyScanEffect;
 using chromance::core::kBlack;
@@ -239,4 +243,111 @@ void test_two_dots_lights_two_pixels_and_changes_colors_on_sequence() {
       TEST_ASSERT_NOT_EQUAL_UINT32(e.sequence_len_ms(j), li);
     }
   }
+}
+
+void test_hrv_hexagon_fades_holds_and_switches_hex() {
+  HrvHexagonEffect e;
+  PixelsMap map;
+  std::vector<Rgb> out(map.led_count());
+  EffectFrame frame;
+  frame.params.brightness = 255;
+
+  e.reset(0);
+
+  // Start of cycle: fully black.
+  frame.now_ms = 0;
+  e.render(frame, map, out.data(), out.size());
+  size_t lit = 0;
+  for (const auto& c : out) lit += (c.r || c.g || c.b) ? 1 : 0;
+  TEST_ASSERT_EQUAL_UINT32(0, lit);
+
+  // Mid fade-in: should be non-black.
+  const uint8_t first_hex = e.current_hex_index();
+  frame.now_ms = 2000;
+  e.render(frame, map, out.data(), out.size());
+  lit = 0;
+  for (const auto& c : out) lit += (c.r || c.g || c.b) ? 1 : 0;
+  TEST_ASSERT_TRUE(lit > 0);
+
+  // Hold: should still be non-black.
+  frame.now_ms = 4500;  // after fade-in
+  e.render(frame, map, out.data(), out.size());
+  lit = 0;
+  for (const auto& c : out) lit += (c.r || c.g || c.b) ? 1 : 0;
+  TEST_ASSERT_TRUE(lit > 0);
+
+  // End of cycle: back to black and hex advances (when possible).
+  frame.now_ms = 15000;
+  e.render(frame, map, out.data(), out.size());
+  lit = 0;
+  for (const auto& c : out) lit += (c.r || c.g || c.b) ? 1 : 0;
+  TEST_ASSERT_EQUAL_UINT32(0, lit);
+  if (e.current_segment_count() > 0) {
+    TEST_ASSERT_NOT_EQUAL_UINT8(first_hex, e.current_hex_index());
+  }
+}
+
+void test_strip_segment_stepper_lights_one_segment_per_strip_and_blanks_short_strips() {
+  StripSegmentStepperEffect e(/*step_ms=*/0);  // disable auto-advance for test
+  PixelsMap map;
+  std::vector<Rgb> out(map.led_count());
+  EffectFrame frame;
+  frame.params.brightness = 255;
+
+  e.reset(0);
+  TEST_ASSERT_EQUAL_UINT8(1, e.segment_number());
+
+  frame.now_ms = 0;
+  e.render(frame, map, out.data(), out.size());
+
+  uint16_t lit_per_strip[4] = {0, 0, 0, 0};
+  const uint8_t* strips = chromance::core::MappingTables::global_to_strip();
+  for (size_t i = 0; i < out.size(); ++i) {
+    if (!(out[i].r || out[i].g || out[i].b)) continue;
+    const uint8_t s = strips[i];
+    if (s < 4) lit_per_strip[s]++;
+  }
+  TEST_ASSERT_EQUAL_UINT16(14, lit_per_strip[0]);
+  TEST_ASSERT_EQUAL_UINT16(14, lit_per_strip[1]);
+  TEST_ASSERT_EQUAL_UINT16(14, lit_per_strip[2]);
+  TEST_ASSERT_EQUAL_UINT16(14, lit_per_strip[3]);
+
+  // Advance to k=12; strip2 has only 6 segments in the full mapping, so it should go black.
+  for (uint8_t i = 0; i < 11; ++i) e.next(0);
+  TEST_ASSERT_EQUAL_UINT8(12, e.segment_number());
+  e.render(frame, map, out.data(), out.size());
+
+  for (uint8_t i = 0; i < 4; ++i) lit_per_strip[i] = 0;
+  for (size_t i = 0; i < out.size(); ++i) {
+    if (!(out[i].r || out[i].g || out[i].b)) continue;
+    const uint8_t s = strips[i];
+    if (s < 4) lit_per_strip[s]++;
+  }
+  TEST_ASSERT_EQUAL_UINT16(0, lit_per_strip[2]);
+  TEST_ASSERT_EQUAL_UINT16(0, lit_per_strip[0]);   // strip0 has 11 segments
+  TEST_ASSERT_EQUAL_UINT16(14, lit_per_strip[1]);  // strip1 has 12 segments
+  TEST_ASSERT_EQUAL_UINT16(0, lit_per_strip[3]);   // strip3 has 11 segments
+}
+
+void test_strip_segment_stepper_auto_advance_can_be_disabled() {
+  StripSegmentStepperEffect e(/*step_ms=*/10);
+  PixelsMap map;
+  std::vector<Rgb> out(map.led_count());
+  EffectFrame frame;
+  frame.params.brightness = 255;
+
+  e.reset(0);
+  TEST_ASSERT_TRUE(e.auto_advance_enabled());
+  TEST_ASSERT_EQUAL_UINT8(1, e.segment_number());
+
+  frame.now_ms = 25;
+  e.render(frame, map, out.data(), out.size());
+  TEST_ASSERT_EQUAL_UINT8(3, e.segment_number());  // 0->10->20 advanced twice
+
+  e.set_auto_advance_enabled(false, 25);
+  TEST_ASSERT_FALSE(e.auto_advance_enabled());
+
+  frame.now_ms = 100;
+  e.render(frame, map, out.data(), out.size());
+  TEST_ASSERT_EQUAL_UINT8(3, e.segment_number());  // frozen
 }

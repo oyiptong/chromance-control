@@ -3,8 +3,10 @@
 #include "core/brightness.h"
 #include "core/brightness_config.h"
 #include "core/effects/pattern_coord_color.h"
+#include "core/effects/pattern_hrv_hexagon.h"
 #include "core/effects/pattern_index_walk.h"
 #include "core/effects/pattern_rainbow_pulse.h"
+#include "core/effects/pattern_strip_segment_stepper.h"
 #include "core/effects/pattern_two_dots.h"
 #include "core/effects/pattern_xy_scan.h"
 #include "core/effects/frame_scheduler.h"
@@ -33,9 +35,11 @@ chromance::core::EffectParams params;
 
 chromance::core::IndexWalkEffect index_walk{25};
 chromance::core::XyScanEffect xy_scan{scan_order, kLedCount, 25};
+chromance::core::StripSegmentStepperEffect strip_segment_stepper{1000};
 chromance::core::CoordColorEffect coord_color;
 chromance::core::RainbowPulseEffect rainbow_pulse{700, 2000, 700};
 chromance::core::TwoDotsEffect two_dots{25};
+chromance::core::HrvHexagonEffect hrv_hexagon;
 chromance::core::IEffect* current_effect = &index_walk;
 uint8_t current_mode = 1;
 
@@ -46,6 +50,9 @@ uint32_t last_render_ms = 0;
 uint32_t last_stats_ms = 0;
 uint16_t last_banner_led = 0xFFFF;
 uint32_t last_banner_ms = 0;
+uint8_t last_hrv_hex = 0xFF;
+uint8_t last_strip_segment_k = 0xFF;
+bool mode2_hold = false;
 
 void print_brightness() {
   const uint8_t soft = settings.brightness_percent();
@@ -78,7 +85,7 @@ void select_mode(uint8_t mode) {
       effect = &index_walk;
       break;
     case 2:
-      effect = &xy_scan;
+      effect = &strip_segment_stepper;
       break;
     case 3:
       effect = &coord_color;
@@ -88,6 +95,9 @@ void select_mode(uint8_t mode) {
       break;
     case 5:
       effect = &two_dots;
+      break;
+    case 6:
+      effect = &hrv_hexagon;
       break;
     default:
       effect = &index_walk;
@@ -102,10 +112,69 @@ void select_mode(uint8_t mode) {
   current_effect = effect;
   current_effect->reset(millis());
   last_banner_led = 0xFFFF;
+  last_hrv_hex = 0xFF;
+  last_strip_segment_k = 0xFF;
+  mode2_hold = false;
   Serial.print("Mode ");
   Serial.print(static_cast<unsigned>(current_mode));
   Serial.print(": ");
   Serial.println(current_effect->id());
+}
+
+void print_hrv_hexagon_state() {
+  Serial.print("HRV hexagon: hex=");
+  Serial.print(static_cast<unsigned>(hrv_hexagon.current_hex_index()));
+  Serial.print(" segs=[");
+  const uint8_t* segs = hrv_hexagon.current_segments();
+  const uint8_t n = hrv_hexagon.current_segment_count();
+  for (uint8_t i = 0; i < n; ++i) {
+    if (i) Serial.print(",");
+    Serial.print(static_cast<unsigned>(segs[i]));
+  }
+  Serial.print("] color=(");
+  const auto c = hrv_hexagon.current_color();
+  Serial.print(static_cast<unsigned>(c.r));
+  Serial.print(",");
+  Serial.print(static_cast<unsigned>(c.g));
+  Serial.print(",");
+  Serial.print(static_cast<unsigned>(c.b));
+  Serial.println(")");
+}
+
+uint16_t find_first_led_for_strip_segment(uint8_t strip, uint8_t seg_in_strip_0) {
+  const uint8_t* strips = chromance::core::MappingTables::global_to_strip();
+  const uint16_t* locals = chromance::core::MappingTables::global_to_local();
+  for (uint16_t i = 0; i < kLedCount; ++i) {
+    if (strips[i] != strip) continue;
+    const uint16_t seg = static_cast<uint16_t>(locals[i] / chromance::core::kLedsPerSegment);
+    if (seg == seg_in_strip_0) return i;
+  }
+  return 0xFFFF;
+}
+
+void print_strip_segment_stepper_state() {
+  const uint8_t k = strip_segment_stepper.segment_number();
+  Serial.print("Strip segment stepper: k=");
+  Serial.print(static_cast<unsigned>(k));
+
+  for (uint8_t strip = 0; strip < 4; ++strip) {
+    const uint16_t i = find_first_led_for_strip_segment(strip, static_cast<uint8_t>(k - 1U));
+    Serial.print(" strip");
+    Serial.print(static_cast<unsigned>(strip));
+    Serial.print("=");
+    if (i == 0xFFFF) {
+      Serial.print("-");
+      continue;
+    }
+
+    const uint8_t seg = chromance::core::MappingTables::global_to_seg()[i];
+    const uint8_t dir = chromance::core::MappingTables::global_to_dir()[i];
+    Serial.print(static_cast<unsigned>(seg));
+    Serial.print("(");
+    Serial.print(dir ? "b_to_a" : "a_to_b");
+    Serial.print(")");
+  }
+  Serial.println();
 }
 
 }  // namespace
@@ -134,7 +203,7 @@ void setup() {
       settings.brightness_percent(), chromance::core::kHardwareBrightnessCeilingPercent);
 
   Serial.println(
-      "Commands: 1=Index_Walk_Test 2=XY_Scan_Test 3=Coord_Color_Test 4=Rainbow_Pulse 5=Seven_Comets +=brightness_up -=brightness_down");
+      "Commands: 1=Index_Walk_Test 2=Strip_Segment_Stepper 3=Coord_Color_Test 4=Rainbow_Pulse 5=Seven_Comets 6=HRV_hexagon n=next(mode2/mode6) esc=resume_auto(mode2) +=brightness_up -=brightness_down");
   Serial.print("Restored mode: ");
   Serial.println(static_cast<unsigned>(settings.mode()));
   print_brightness();
@@ -152,6 +221,25 @@ void loop() {
     if (c == '3') select_mode(3);
     if (c == '4') select_mode(4);
     if (c == '5') select_mode(5);
+    if (c == '6') select_mode(6);
+    if (c == 'n' || c == 'N') {
+      if (current_mode == 2) {
+        strip_segment_stepper.next(now_ms);
+        strip_segment_stepper.set_auto_advance_enabled(false, now_ms);
+        mode2_hold = true;
+        last_strip_segment_k = 0xFF;
+        print_strip_segment_stepper_state();
+      } else if (current_mode == 6) {
+        hrv_hexagon.force_next(millis());
+        last_hrv_hex = 0xFF;
+      }
+    }
+    if (c == 27) {  // ESC
+      if (current_mode == 2) {
+        strip_segment_stepper.set_auto_advance_enabled(true, now_ms);
+        mode2_hold = false;
+      }
+    }
     if (c == '+') {
       set_brightness_percent(
           chromance::core::brightness_step_up_10(settings.brightness_percent()));
@@ -179,6 +267,22 @@ void loop() {
   const uint32_t frame_start_ms = millis();
   led_out.show(rgb, kLedCount, &stats);
   stats.frame_ms = millis() - frame_start_ms;
+
+  if (current_effect == &strip_segment_stepper) {
+    const uint8_t k = strip_segment_stepper.segment_number();
+    if (k != last_strip_segment_k) {
+      last_strip_segment_k = k;
+      print_strip_segment_stepper_state();
+    }
+  }
+
+  if (current_effect == &hrv_hexagon) {
+    const uint8_t h = hrv_hexagon.current_hex_index();
+    if (h != last_hrv_hex) {
+      last_hrv_hex = h;
+      print_hrv_hexagon_state();
+    }
+  }
 
   // Print a small banner for note-taking while physically validating wiring.
   // Throttle to avoid spamming the UART.

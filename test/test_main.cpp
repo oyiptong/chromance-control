@@ -39,6 +39,9 @@ void test_xy_scan_effect_uses_scan_order();
 void test_coord_color_effect_matches_expected_formula_and_scales_brightness();
 void test_rainbow_pulse_fades_and_holds();
 void test_two_dots_lights_two_pixels_and_changes_colors_on_sequence();
+void test_hrv_hexagon_fades_holds_and_switches_hex();
+void test_strip_segment_stepper_lights_one_segment_per_strip_and_blanks_short_strips();
+void test_strip_segment_stepper_auto_advance_can_be_disabled();
 
 void test_null_modulation_provider_returns_defaults();
 
@@ -92,6 +95,9 @@ int main(int argc, char** argv) {
   RUN_TEST(test_coord_color_effect_matches_expected_formula_and_scales_brightness);
   RUN_TEST(test_rainbow_pulse_fades_and_holds);
   RUN_TEST(test_two_dots_lights_two_pixels_and_changes_colors_on_sequence);
+  RUN_TEST(test_hrv_hexagon_fades_holds_and_switches_hex);
+  RUN_TEST(test_strip_segment_stepper_lights_one_segment_per_strip_and_blanks_short_strips);
+  RUN_TEST(test_strip_segment_stepper_auto_advance_can_be_disabled);
 
   RUN_TEST(test_null_modulation_provider_returns_defaults);
 

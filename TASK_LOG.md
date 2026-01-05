@@ -774,6 +774,95 @@ Proof-of-life:
 - `pio run -e runtime`: SUCCESS
 - `pio run -e runtime_bench`: SUCCESS
 
+### 2026-01-05 — Runtime: add pattern 6 “HRV hexagon” (random hex + internal edges)
+
+Status: 🟢 Done
+
+What was done:
+- Added runtime mode `6` (“HRV hexagon”): lights one of the 8 topology-derived hexagons (perimeter + internal edges) in a random color, looping:
+  - fade in 4s, hold 2s, fade out 9s, then pick a different hex and new color
+- Extended persisted mode range to include `6` (sanitized persistence remains safe).
+- Added native unit test for the new effect’s fade/hold/cycle behavior.
+
+Files touched:
+- src/core/effects/pattern_hrv_hexagon.h
+- src/core/effects/pattern_hrv_hexagon.cpp
+- src/core/settings/mode_setting.h
+- src/main_runtime.cpp
+- test/test_effect_patterns.cpp
+- test/test_main.cpp
+- test/test_mode_setting.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (36 test cases)
+- `pio run -e runtime`: SUCCESS
+- `pio run -e runtime_bench`: SUCCESS
+
+### 2026-01-05 — Runtime: HRV hexagon debug output + manual next-hex
+
+Status: 🟢 Done
+
+What was done:
+- Added serial debug output for mode `6` to print the currently-selected hex index, segment IDs, and RGB color whenever the hex changes.
+- Added serial command `n`/`N` to force the next random hex immediately (for fast physical verification / topology correction).
+
+Files touched:
+- src/core/effects/pattern_hrv_hexagon.h
+- src/main_runtime.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (36 test cases)
+- `pio run -e runtime`: SUCCESS
+
+### 2026-01-05 — Runtime: replace mode 2 with strip segment stepper (physical remap aid)
+
+Status: 🟢 Done
+
+What was done:
+- Replaced runtime mode `2` (formerly `XY_Scan_Test`) with a strip-colored segment stepper to help re-derive wiring/mapping:
+  - strip0 red, strip1 blue, strip2 green, strip3 cyan
+  - shows per-strip segment number `k` (1..12) simultaneously across all strips
+  - auto-cycles `k`; press `n`/`N` to advance `k` manually (wraps 12→1)
+  - strips with fewer than `k` segments stay black until `k` wraps
+- Added serial logging whenever `k` changes: prints `k` and the current mapping’s `segId(dir)` for each strip at that position.
+
+Files touched:
+- src/core/effects/pattern_strip_segment_stepper.h
+- src/main_runtime.cpp
+- test/test_effect_patterns.cpp
+- test/test_main.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (37 test cases)
+- `pio run -e runtime`: SUCCESS
+- `pio run -e runtime_bench`: SUCCESS
+
+### 2026-01-05 — Runtime: mode 2 manual step-and-hold (+ ESC resume auto)
+
+Status: 🟢 Done
+
+What was done:
+- Updated mode `2` (strip segment stepper) control flow:
+  - default: auto-rotates `k` (1..12)
+  - press `n`/`N`: advances `k` once, logs the new `k`, then holds (no further auto-advance) until `n` pressed again
+  - press ESC: exits hold and resumes auto-rotation
+- Added a portable unit test to validate that auto-advance can be disabled.
+
+Files touched:
+- src/core/effects/pattern_strip_segment_stepper.h
+- src/main_runtime.cpp
+- test/test_effect_patterns.cpp
+- test/test_main.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (38 test cases)
+- `pio run -e runtime`: SUCCESS
+- `pio run -e runtime_bench`: SUCCESS
+
 ### 2026-01-05 — Runtime: mode 5 “Seven_Comets” (was Two_Comets)
 
 Status: 🟢 Done
