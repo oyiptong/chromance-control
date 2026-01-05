@@ -9,6 +9,7 @@
 #include "core/mapping/pixels_map.h"
 #include "platform/led/dotstar_output.h"
 #include "platform/ota.h"
+#include "platform/settings.h"
 
 namespace {
 
@@ -16,12 +17,15 @@ constexpr char kFirmwareVersion[] = "runtime-0.1.0";
 
 chromance::platform::DotstarOutput led_out;
 chromance::platform::OtaManager ota;
+chromance::platform::RuntimeSettings settings;
 
 chromance::core::PixelsMap pixels_map;
 
 constexpr size_t kLedCount = chromance::core::MappingTables::led_count();
 chromance::core::Rgb rgb[kLedCount];
 uint16_t scan_order[kLedCount];
+
+chromance::core::EffectParams params;
 
 chromance::core::IndexWalkEffect index_walk{25};
 chromance::core::XyScanEffect xy_scan{scan_order, kLedCount, 25};
@@ -35,6 +39,23 @@ uint32_t last_render_ms = 0;
 uint32_t last_stats_ms = 0;
 uint16_t last_banner_led = 0xFFFF;
 uint32_t last_banner_ms = 0;
+
+uint8_t percent_to_255(uint8_t percent) {
+  if (percent > 100) percent = 100;
+  return static_cast<uint8_t>((static_cast<uint16_t>(percent) * 255U) / 100U);
+}
+
+void print_brightness() {
+  Serial.print("Brightness: ");
+  Serial.print(static_cast<unsigned>(settings.brightness_percent()));
+  Serial.println("% (+/- to change, persisted)");
+}
+
+void set_brightness_percent(uint8_t percent) {
+  settings.set_brightness_percent(percent);
+  params.brightness = percent_to_255(settings.brightness_percent());
+  print_brightness();
+}
 
 void select_effect(chromance::core::IEffect* effect) {
   if (effect == nullptr) {
@@ -67,7 +88,12 @@ void setup() {
   ota.begin(kFirmwareVersion);
   scheduler.reset(millis());
 
-  Serial.println("Commands: 1=Index_Walk_Test 2=XY_Scan_Test 3=Coord_Color_Test");
+  settings.begin();
+  params = chromance::core::EffectParams{};
+  params.brightness = percent_to_255(settings.brightness_percent());
+
+  Serial.println("Commands: 1=Index_Walk_Test 2=XY_Scan_Test 3=Coord_Color_Test +=brightness_up -=brightness_down");
+  print_brightness();
   select_effect(&index_walk);
 }
 
@@ -80,6 +106,14 @@ void loop() {
     if (c == '1') select_effect(&index_walk);
     if (c == '2') select_effect(&xy_scan);
     if (c == '3') select_effect(&coord_color);
+    if (c == '+') {
+      const uint8_t cur = settings.brightness_percent();
+      set_brightness_percent(static_cast<uint8_t>(cur >= 100 ? 100 : (cur + 10)));
+    }
+    if (c == '-') {
+      const uint8_t cur = settings.brightness_percent();
+      set_brightness_percent(static_cast<uint8_t>(cur <= 0 ? 0 : (cur - 10)));
+    }
   }
 
   const uint32_t frame_ms = ota.is_updating() ? 100 : 20;
@@ -94,6 +128,7 @@ void loop() {
   frame.now_ms = now_ms;
   frame.dt_ms = scheduler.dt_ms();
   frame.signals = signals;
+  frame.params = params;
   current_effect->render(frame, pixels_map, rgb, kLedCount);
   const uint32_t frame_start_ms = millis();
   led_out.show(rgb, kLedCount, &stats);
@@ -144,6 +179,9 @@ void loop() {
 
   if (static_cast<int32_t>(now_ms - last_stats_ms) >= 1000) {
     last_stats_ms = now_ms;
+    Serial.print("brightness_pct=");
+    Serial.print(static_cast<unsigned>(settings.brightness_percent()));
+    Serial.print(" ");
     Serial.print("flush_ms=");
     Serial.print(stats.flush_ms);
     Serial.print(" frame_ms=");

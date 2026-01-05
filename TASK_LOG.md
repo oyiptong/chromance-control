@@ -607,3 +607,22 @@ What was verified:
 
 Proof-of-life:
 - `pio test -e native`: PASSED (11 test cases)
+
+### 2026-01-05 — Milestone 3: runtime brightness control (+/-) with persistence
+
+Status: 🟢 Done
+
+What was done:
+- Added serial `+`/`-` controls to change brightness in 10% increments (clamped 0..100).
+- Persisted brightness percent across reboots using ESP32 NVS (`Preferences`).
+- Included `brightness_pct` in the periodic runtime UART stats line for easier log capture.
+
+Files touched:
+- src/platform/settings.h
+- src/platform/settings.cpp
+- src/main_runtime.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (11 test cases)
+- `pio run -e runtime`: SUCCESS
