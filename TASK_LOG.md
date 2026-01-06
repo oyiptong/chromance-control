@@ -733,6 +733,22 @@ Proof-of-life:
 - `pio test -e native`: PASSED (35 test cases)
 - `pio run -e runtime`: SUCCESS
 
+### 2026-01-06 — Mode 7: breathing improvement report + implementation plan
+
+Status: 🟢 Done
+
+What was done:
+- Wrote a comprehensive report + implementation plan to upgrade Mode 7 from geometry/time-driven behavior to a topology-driven, event-driven breath loop.
+- Included concrete completion conditions (inhale dots reach center; exhale wavefront counts; pause beat-count completion), required topology data model, generator touchpoints, and a native-test checklist.
+- Added relevant excerpts of current Mode 7 code to highlight what changes (time-driven phase selection, geometric spoke assignment, nearest-LED dots, continuous wave field).
+
+Files touched:
+- breath_pattern_improvement_implementation_plan.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `wc -l breath_pattern_improvement_implementation_plan.md` → `381`
+
 ### 2026-01-05 — Runtime: “Seven_Comets” per-comet sequences (unique lengths + independent rerolls)
 
 Status: 🟢 Done
