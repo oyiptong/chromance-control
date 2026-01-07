@@ -861,6 +861,59 @@ Files touched:
 Proof-of-life:
 - `wc -l breath_pattern_improvement_implementation_plan.md` → `682`
 
+### 2026-01-07 — Mode 7 plan v2.6: correctness/robustness hardening (EXHALE vertex completion)
+
+Status: 🟢 Done
+
+What was done:
+- Refined the Mode 7 plan to v2.6 by hardening correctness/robustness: EXHALE completion is now vertex-based (outermost vertices by `d_max`) rather than any boundary/outer-segment heuristic.
+- Updated INHALE plateau safety to allow equal-distance moves when the plateau vertex is the assigned center-adjacent goal.
+- Tightened PAUSE fail-safe to be atomic (at most one beat processed per frame; real beats override virtual timeout beats).
+- Clarified `s/S` determinism (reinitialization re-runs RNG-based start selection; deterministic given seed + keypress sequence).
+- Added guardrail for `lane_count == 0` to prevent deadlock in partial/bench builds and added explicit memory/alloc constraints.
+- Expanded the test plan to cover the above edge cases (no removals).
+
+Files touched:
+- breath_pattern_improvement_implementation_plan.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `wc -l breath_pattern_improvement_implementation_plan.md` → `721`
+
+### 2026-01-07 — Render chromance map SVG/PNG (segments + vertices)
+
+Status: 🟢 Done
+
+What was done:
+- Added a small renderer to visualize `mapping/ledmap.json` with segment ID labels (`S1..S40`) and derived vertex IDs (`V#`, junction points between segments).
+- Generated `chromance_map.svg` and `chromance_map.png` in the repo root for quick reference during topology/mapping work.
+
+Files touched:
+- scripts/render_chromance_map.py
+- chromance_map.svg
+- chromance_map.png
+- TASK_LOG.md
+
+Proof-of-life:
+- `python3 scripts/render_chromance_map.py --ledmap mapping/ledmap.json --out-svg chromance_map.svg --out-png chromance_map.png`
+
+### 2026-01-07 — Improve chromance map label legibility
+
+Status: 🟢 Done
+
+What was done:
+- Increased segment/vertex label font sizes and made labels bold with a white halo stroke for improved readability in `chromance_map.svg`/`chromance_map.png`.
+- Regenerated both artifacts from the same `mapping/ledmap.json`.
+
+Files touched:
+- scripts/render_chromance_map.py
+- chromance_map.svg
+- chromance_map.png
+- TASK_LOG.md
+
+Proof-of-life:
+- `python3 scripts/render_chromance_map.py --ledmap mapping/ledmap.json --out-svg chromance_map.svg --out-png chromance_map.png`
+
 ### 2026-01-05 — Runtime: “Seven_Comets” per-comet sequences (unique lengths + independent rerolls)
 
 Status: 🟢 Done
