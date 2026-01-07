@@ -768,6 +768,20 @@ Files touched:
 Proof-of-life:
 - `pio test -e native`: PASSED (48 test cases)
 
+### 2026-01-07 — PlatformIO: add OTA upload environments for runtime
+
+Status: 🟢 Done
+
+What was done:
+- Added explicit OTA upload environments so `runtime` and `runtime_bench` can be uploaded via ArduinoOTA without changing the default serial upload configuration.
+
+Files touched:
+- platformio.ini
+- TASK_LOG.md
+
+Proof-of-life:
+- Use: `pio run -e runtime_ota -t upload` (or `pio run -e runtime_bench_ota -t upload`)
+
 ### 2026-01-07 — Runtime: Mode 1 step-hold (`s`/`S`) to freeze advancement
 
 Status: 🟢 Done
