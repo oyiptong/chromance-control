@@ -237,7 +237,7 @@ void setup() {
       settings.brightness_percent(), chromance::core::kHardwareBrightnessCeilingPercent);
 
   Serial.println(
-      "Commands: 1=Index_Walk_Test 2=Strip_Segment_Stepper 3=Coord_Color_Test 4=Rainbow_Pulse 5=Seven_Comets 6=HRV_hexagon 7=Breathing n=next(mode1/2/6/7) N=prev(mode2/6/7) s/S=step(mode1) esc=auto(mode1/2/6/7) +=brightness_up -=brightness_down");
+      "Commands: 1=Index_Walk_Test 2=Strip_Segment_Stepper 3=Coord_Color_Test 4=Rainbow_Pulse 5=Seven_Comets 6=HRV_hexagon 7=Breathing n=next(mode1/2/6/7) N=prev(mode2/6/7) s/S=step(mode1) lane(mode7 manual inhale) esc=auto(mode1/2/6/7) +=brightness_up -=brightness_down");
   Serial.print("Restored mode: ");
   Serial.println(static_cast<unsigned>(settings.mode()));
   print_brightness();
@@ -311,7 +311,9 @@ void loop() {
       }
     }
     if (c == 's') {
-      if (current_mode == 1) {
+      if (current_mode == 7) {
+        breathing.lane_next(now_ms);
+      } else if (current_mode == 1) {
         if (index_walk.in_vertex_mode()) {
           // Pause vertex selection (manual), but keep looping the fill animation.
           index_walk.clear_manual_hold(now_ms);
@@ -330,7 +332,9 @@ void loop() {
       }
     }
     if (c == 'S') {
-      if (current_mode == 1) {
+      if (current_mode == 7) {
+        breathing.lane_prev(now_ms);
+      } else if (current_mode == 1) {
         if (index_walk.in_vertex_mode()) {
           index_walk.clear_manual_hold(now_ms);
           index_walk.vertex_prev(now_ms);

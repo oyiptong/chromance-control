@@ -782,6 +782,44 @@ Files touched:
 Proof-of-life:
 - Use: `pio run -e runtime_ota -t upload` (or `pio run -e runtime_bench_ota -t upload`)
 
+### 2026-01-07 — Runtime: implement Mode 7 topology-driven breathing (center = vertex 12)
+
+Status: 🟢 Done
+
+What was done:
+- Replaced the time/geometric Mode 7 implementation with an event-driven, topology-driven phase machine:
+  - INHALE: multiple dots route along topology edges toward `CENTER_VERTEX_ID=12` (fallback to graph center if invalid for the active subgraph), with smooth brightness-only tails.
+  - PAUSE_1/PAUSE_2: beat-count completion (3–7) with fail-safe virtual beats and beat-tied crossfade.
+  - EXHALE: discrete wavefront completion based on outermost vertices receiving `target_waves`, with a banded visual wave.
+- Added INHALE-only lane stepping (`s`/`S`) in runtime: rotates center-lane offset and reinitializes INHALE (manual mode only).
+- Added native unit tests validating: center selection, phase progression, manual phase selection, inhale path monotonicity (dist non-increasing), and per-dot segment-simple routing.
+
+Files touched:
+- src/core/effects/pattern_breathing_mode.h
+- src/core/effects/pattern_breathing_mode.cpp
+- src/main_runtime.cpp
+- test/test_effect_patterns.cpp
+- test/test_main.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (50 test cases)
+- `pio run -e runtime`: SUCCESS
+
+### 2026-01-07 🧪 Test added — Generator topology table invariants (Python)
+
+Status: 🧪 Test added
+
+What was done:
+- Added lightweight Python unit tests to validate the generator’s canonical vertex ID scheme (lexicographic `(vx,vy)` ordering) and segment endpoint→vertex ID mapping invariants.
+
+Files touched:
+- test/scripts/test_generate_ledmap_topology.py
+- TASK_LOG.md
+
+Proof-of-life:
+- `python3 -m unittest discover -s test/scripts -p 'test_*.py'`: OK
+
 ### 2026-01-07 — Runtime: Mode 1 step-hold (`s`/`S`) to freeze advancement
 
 Status: 🟢 Done

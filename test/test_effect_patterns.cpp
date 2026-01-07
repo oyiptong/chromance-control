@@ -688,19 +688,57 @@ void test_breathing_effect_has_expected_phases() {
 
   e.reset(0);
 
-  // Inhale mid: inward wave should light many pixels.
-  frame.now_ms = 2000;
+  // Center must be the configured vertex (12) for the full mapping.
+  frame.now_ms = 0;
+  frame.dt_ms = 20;
   e.render(frame, map, out.data(), out.size());
-  size_t lit = 0;
-  for (const auto& c : out) lit += (c.r || c.g || c.b) ? 1 : 0;
-  TEST_ASSERT_TRUE(lit > 20);
+  TEST_ASSERT_EQUAL_UINT8(12, e.center_vertex_id());
 
-  // Exhale mid: outward dot should light a single pixel.
-  frame.now_ms = 4000 + 3000 + 3500;
-  e.render(frame, map, out.data(), out.size());
-  lit = 0;
-  for (const auto& c : out) lit += (c.r || c.g || c.b) ? 1 : 0;
-  TEST_ASSERT_EQUAL_UINT32(1, lit);
+  // Auto should progress through phases based on completion.
+  // Simulate time quickly with a large dt so inhale/exhale complete fast.
+  uint32_t now = 0;
+  BreathingEffect::Phase last = e.phase();
+  bool saw_pause1 = false;
+  bool saw_exhale = false;
+  bool saw_pause2 = false;
+  bool saw_lit_inhale = false;
+  bool saw_lit_pause1 = false;
+  bool saw_lit_exhale = false;
+  bool saw_lit_pause2 = false;
+  for (uint16_t iter = 0; iter < 200; ++iter) {
+    now += 500;
+    frame.now_ms = now;
+    frame.dt_ms = 500;
+    e.render(frame, map, out.data(), out.size());
+    const auto p = e.phase();
+    if (p != last) {
+      last = p;
+      if (p == BreathingEffect::Phase::Pause1) saw_pause1 = true;
+      if (p == BreathingEffect::Phase::Exhale) saw_exhale = true;
+      if (p == BreathingEffect::Phase::Pause2) saw_pause2 = true;
+    }
+
+    // Some phases are allowed to be fully black for brief moments (e.g., between beats),
+    // so just track that each phase produces light at least once.
+    size_t lit = 0;
+    for (const auto& c : out) lit += (c.r || c.g || c.b) ? 1 : 0;
+    if (lit > 0) {
+      if (p == BreathingEffect::Phase::Inhale) saw_lit_inhale = true;
+      if (p == BreathingEffect::Phase::Pause1) saw_lit_pause1 = true;
+      if (p == BreathingEffect::Phase::Exhale) saw_lit_exhale = true;
+      if (p == BreathingEffect::Phase::Pause2) saw_lit_pause2 = true;
+    }
+    if (saw_pause1 && saw_exhale && saw_pause2 && p == BreathingEffect::Phase::Inhale) {
+      break;  // completed a full cycle
+    }
+  }
+  TEST_ASSERT_TRUE(saw_pause1);
+  TEST_ASSERT_TRUE(saw_exhale);
+  TEST_ASSERT_TRUE(saw_pause2);
+  TEST_ASSERT_TRUE(saw_lit_inhale);
+  TEST_ASSERT_TRUE(saw_lit_pause1);
+  TEST_ASSERT_TRUE(saw_lit_exhale);
+  TEST_ASSERT_TRUE(saw_lit_pause2);
 }
 
 void test_breathing_effect_manual_phase_selection() {
@@ -713,27 +751,173 @@ void test_breathing_effect_manual_phase_selection() {
   e.reset(0);
   TEST_ASSERT_FALSE(e.manual_enabled());
 
-  // Force exhale phase (dot outward): should still be a single pixel.
+  // Force exhale phase: should keep rendering and not auto-transition.
   e.set_manual_phase(2, 0);
   TEST_ASSERT_TRUE(e.manual_enabled());
   TEST_ASSERT_EQUAL_UINT8(2, e.manual_phase());
-  frame.now_ms = 100;
-  e.render(frame, map, out.data(), out.size());
-  size_t lit = 0;
-  for (const auto& c : out) lit += (c.r || c.g || c.b) ? 1 : 0;
-  TEST_ASSERT_EQUAL_UINT32(1, lit);
+  bool saw_lit_exhale = false;
+  for (uint8_t i = 0; i < 5; ++i) {
+    frame.now_ms = static_cast<uint32_t>(1000U * i);
+    frame.dt_ms = 1000;
+    e.render(frame, map, out.data(), out.size());
+    TEST_ASSERT_EQUAL_UINT8(2, static_cast<uint8_t>(e.phase()));
+    size_t lit = 0;
+    for (const auto& c : out) lit += (c.r || c.g || c.b) ? 1 : 0;
+    if (lit > 0) saw_lit_exhale = true;
+  }
+  TEST_ASSERT_TRUE(saw_lit_exhale);
 
-  // Previous phase (pause 1): pick a time within the beat to ensure it lights.
+  // Previous phase (pause 1): should pulse and remain in pause 1.
   e.prev_phase(0);
   TEST_ASSERT_EQUAL_UINT8(1, e.manual_phase());
   frame.now_ms = 50;
+  frame.dt_ms = 50;
   e.render(frame, map, out.data(), out.size());
-  lit = 0;
+  size_t lit = 0;
   for (const auto& c : out) lit += (c.r || c.g || c.b) ? 1 : 0;
-  TEST_ASSERT_TRUE(lit > 0);
+  // Pulse may be zero at this exact time; just ensure the phase is active.
+  TEST_ASSERT_EQUAL_UINT8(1, static_cast<uint8_t>(e.phase()));
 
   e.set_auto(0);
   TEST_ASSERT_FALSE(e.manual_enabled());
+}
+
+static void bfs_dist(uint8_t start,
+                     const uint8_t* sva,
+                     const uint8_t* svb,
+                     const bool* present,
+                     uint8_t vcount,
+                     uint8_t scount,
+                     uint8_t* out) {
+  for (uint8_t i = 0; i < vcount; ++i) out[i] = 0xFF;
+  uint8_t q[32];
+  uint8_t qh = 0, qt = 0;
+  out[start] = 0;
+  q[qt++] = start;
+  while (qh != qt) {
+    const uint8_t v = q[qh++];
+    const uint8_t dv = out[v];
+    for (uint8_t seg = 1; seg <= scount; ++seg) {
+      if (!present[seg]) continue;
+      const uint8_t a = sva[seg];
+      const uint8_t b = svb[seg];
+      uint8_t u = 0xFF;
+      if (a == v) u = b;
+      if (b == v) u = a;
+      if (u == 0xFF || u >= vcount) continue;
+      if (out[u] != 0xFF) continue;
+      out[u] = static_cast<uint8_t>(dv + 1U);
+      q[qt++] = u;
+    }
+  }
+}
+
+void test_breathing_inhale_paths_are_monotone_and_segment_simple() {
+  BreathingEffect e;
+  PixelsMap map;
+  std::vector<Rgb> out(map.led_count());
+  EffectFrame frame;
+  frame.params.brightness = 255;
+  frame.now_ms = 0;
+  frame.dt_ms = 20;
+
+  e.reset(0);
+  e.render(frame, map, out.data(), out.size());  // build caches + init inhale
+
+  const uint8_t center = e.center_vertex_id();
+  const uint8_t vcount = chromance::core::MappingTables::vertex_count();
+  const uint8_t scount = chromance::core::MappingTables::segment_count();
+  const uint8_t* sva = chromance::core::MappingTables::seg_vertex_a();
+  const uint8_t* svb = chromance::core::MappingTables::seg_vertex_b();
+
+  // Determine present segments in this mapping build.
+  bool present[41] = {};
+  const uint8_t* gseg = chromance::core::MappingTables::global_to_seg();
+  for (uint16_t i = 0; i < chromance::core::MappingTables::led_count(); ++i) {
+    const uint8_t s = gseg[i];
+    if (s >= 1 && s <= scount) present[s] = true;
+  }
+
+  uint8_t dist[32] = {};
+  bfs_dist(center, sva, svb, present, vcount, scount, dist);
+
+  // Starts are distinct.
+  const uint8_t dots = e.dot_count();
+  TEST_ASSERT_TRUE(dots > 0);
+  for (uint8_t i = 0; i < dots; ++i) {
+    for (uint8_t j = 0; j < i; ++j) {
+      TEST_ASSERT_NOT_EQUAL_UINT8(e.dot_start_vertex(i), e.dot_start_vertex(j));
+    }
+  }
+
+  // Each dot path:
+  // - ends at center
+  // - dist is non-increasing
+  // - segments are not repeated
+  for (uint8_t i = 0; i < dots; ++i) {
+    const uint8_t steps = e.dot_step_count(i);
+    TEST_ASSERT_TRUE(steps >= 1);
+
+    bool used_seg[41] = {};
+    uint8_t cur = e.dot_start_vertex(i);
+    uint8_t prev_d = dist[cur];
+    TEST_ASSERT_TRUE(prev_d != 0xFF);
+
+    for (uint8_t s = 0; s < steps; ++s) {
+      const uint8_t seg_id = e.dot_step_seg(i, s);
+      TEST_ASSERT_TRUE(seg_id >= 1 && seg_id <= scount);
+      TEST_ASSERT_FALSE(used_seg[seg_id]);
+      used_seg[seg_id] = true;
+
+      const uint8_t va = sva[seg_id];
+      const uint8_t vb = svb[seg_id];
+      uint8_t next = 0xFF;
+      if (cur == va) next = vb;
+      if (cur == vb) next = va;
+      TEST_ASSERT_TRUE(next != 0xFF);
+
+      const uint8_t dnext = dist[next];
+      TEST_ASSERT_TRUE(dnext != 0xFF);
+      TEST_ASSERT_TRUE(dnext <= prev_d);
+      prev_d = dnext;
+      cur = next;
+    }
+    TEST_ASSERT_EQUAL_UINT8(center, cur);
+  }
+}
+
+void test_breathing_lane_step_only_affects_manual_inhale() {
+  BreathingEffect e;
+  PixelsMap map;
+  std::vector<Rgb> out(map.led_count());
+  EffectFrame frame;
+  frame.params.brightness = 255;
+
+  e.reset(0);
+  frame.now_ms = 0;
+  frame.dt_ms = 20;
+  e.render(frame, map, out.data(), out.size());
+  const uint8_t lanes = e.lane_count();
+  TEST_ASSERT_TRUE(lanes > 0);
+
+  // Not manual: lane_next is a no-op.
+  const uint8_t rr0 = e.center_lane_rr_offset();
+  e.lane_next(0);
+  TEST_ASSERT_EQUAL_UINT8(rr0, e.center_lane_rr_offset());
+
+  // Manual inhale: lane_next/prev wraps.
+  e.set_manual_phase(0, 0);
+  const uint8_t rr1 = e.center_lane_rr_offset();
+  e.lane_next(1);
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>((rr1 + 1U) % lanes), e.center_lane_rr_offset());
+  e.lane_prev(2);
+  TEST_ASSERT_EQUAL_UINT8(rr1, e.center_lane_rr_offset());
+
+  // Manual non-inhale: no-op.
+  e.set_manual_phase(1, 3);
+  const uint8_t rr2 = e.center_lane_rr_offset();
+  e.lane_next(4);
+  TEST_ASSERT_EQUAL_UINT8(rr2, e.center_lane_rr_offset());
 }
 
 void test_strip_segment_stepper_prev_wraps() {

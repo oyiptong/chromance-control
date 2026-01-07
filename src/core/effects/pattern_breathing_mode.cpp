@@ -3,10 +3,13 @@
 namespace chromance {
 namespace core {
 
-const Rgb BreathingEffect::kInhaleA{255, 80, 0};
-const Rgb BreathingEffect::kInhaleB{255, 180, 40};
-const Rgb BreathingEffect::kExhaleA{0, 255, 220};
-const Rgb BreathingEffect::kExhaleB{120, 255, 180};
+// Out-of-class definitions for static constexpr members (C++11/14 compatibility).
+constexpr Rgb BreathingEffect::kInhaleDotColor;
+constexpr Rgb BreathingEffect::kExhaleWaveColor;
+constexpr Rgb BreathingEffect::kInhalePauseColor;
+constexpr Rgb BreathingEffect::kExhalePauseColor;
+constexpr uint8_t BreathingEffect::kTailLut[BreathingEffect::kTailLutLen];
 
 }  // namespace core
 }  // namespace chromance
+
