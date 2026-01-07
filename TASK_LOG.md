@@ -733,6 +733,24 @@ Proof-of-life:
 - `pio test -e native`: PASSED (35 test cases)
 - `pio run -e runtime`: SUCCESS
 
+### 2026-01-07 — Mode 7: swap inhale/exhale colors + 7×7 inhale + 14-wave exhale
+
+Status: 🟢 Done
+
+What was done:
+- Swapped inhale/exhale colors (inhale now uses previous exhale color; exhale uses previous inhale color).
+- Pauses: heartbeat count now random `2..4`.
+- Inhale: defaults to `7` dots and requires `7` full inhale cycles (all dots reach center) before advancing.
+- Exhale: emits up to `14` wavefronts spaced at ~`1.5` segment-layers; after the 14th emission, waits for the last wavefront to reach the edge before completing the phase.
+
+Files touched:
+- src/core/effects/pattern_breathing_mode.h
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (50 test cases)
+- `pio run -e runtime`: SUCCESS
+
 ### 2026-01-07 — Chromance map: generate both front/back view images
 
 Status: 🟢 Done
@@ -819,6 +837,38 @@ Files touched:
 
 Proof-of-life:
 - `python3 -m unittest discover -s test/scripts -p 'test_*.py'`: OK
+
+### 2026-01-07 — Mode 7: configurable inhale dot count + default 9
+
+Status: 🟢 Done
+
+What was done:
+- Made inhale dot count configurable via `BreathingEffect::Config::num_dots` with a new default of `9` (was `7`).
+- Increased `kMaxDots` to `12` and hardened inhale start-vertex selection to clamp dot count to available non-center vertices (prevents edge-case modulo-by-zero in small/bench subgraphs).
+- Added `BreathingEffect::set_config()` to allow future runtime configuration (including center vertex config already present in `Config`).
+
+Files touched:
+- src/core/effects/pattern_breathing_mode.h
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (50 test cases)
+- `pio run -e runtime`: SUCCESS
+
+### 2026-01-07 — Mode 7: slow exhale wave travel (60% speed)
+
+Status: 🟢 Done
+
+What was done:
+- Reduced exhale wave travel speed default to 60% of prior (`wave_speed_layers_q16` 262 → 157), slowing wavefront propagation and emission cadence accordingly.
+
+Files touched:
+- src/core/effects/pattern_breathing_mode.h
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (50 test cases)
+- `pio run -e runtime`: SUCCESS
 
 ### 2026-01-07 — Runtime: Mode 1 step-hold (`s`/`S`) to freeze advancement
 

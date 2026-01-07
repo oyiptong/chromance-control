@@ -34,18 +34,20 @@ class BreathingEffect final : public IEffect {
     bool has_configured_center = true;
 
     // INHALE
-    uint8_t num_dots = 6;
+    uint8_t num_dots = 9;
+    uint8_t inhale_cycles_target = 7;
     uint16_t dot_speed_q16 = 5243;  // 0.08 LEDs/ms in 16.16 fixed
     uint8_t tail_length_leds = 5;
 
     // EXHALE
-    uint8_t target_waves = 7;
-    uint16_t wave_speed_layers_q16 = 262;  // 0.004 layers/ms in 16.16 fixed
+    uint8_t target_waves = 14;
+    uint16_t wave_speed_layers_q16 = 157;  // 0.0024 layers/ms in 16.16 fixed (60% of prior)
+    uint32_t wave_spacing_layers_q16 = 98304;  // 1.5 layers in 16.16 fixed
     uint16_t exhale_band_width_q16 = 22938;  // 0.35 layers in 16.16 fixed
 
     // PAUSE
-    uint8_t beats_target_min = 3;
-    uint8_t beats_target_max = 7;
+    uint8_t beats_target_min = 2;
+    uint8_t beats_target_max = 4;
     uint16_t beat_period_ms = 2000;  // ~30bpm
     uint16_t max_pause_duration_ms = 6000;
   };
@@ -58,6 +60,7 @@ class BreathingEffect final : public IEffect {
 
     rng_state_ = seed_from_time(now_ms);
     center_lane_rr_offset_ = 0;
+    inhale_cycles_done_ = 0;
 
     phase_ = Phase::Inhale;
     phase_start_ms_ = now_ms;
@@ -90,8 +93,14 @@ class BreathingEffect final : public IEffect {
     init_phase(now_ms, /*auto_transition_into_inhale=*/true);
   }
 
-  bool manual_enabled() const { return manual_enabled_; }
+ bool manual_enabled() const { return manual_enabled_; }
   uint8_t manual_phase() const { return static_cast<uint8_t>(manual_phase_); }
+
+  // Runtime-tweakable config (optional). Any change forces a rebuild on next render.
+  void set_config(const Config& cfg) {
+    cfg_ = cfg;
+    built_ = false;
+  }
 
   // INHALE-only, manual-only: rotate center lane offset and reinit inhale.
   void lane_next(uint32_t now_ms) { lane_step(+1, now_ms); }
@@ -151,14 +160,16 @@ class BreathingEffect final : public IEffect {
   static constexpr uint8_t kMaxSegments = 40;
   static constexpr uint8_t kMaxDegree = 6;
   static constexpr uint8_t kLedsPerSegment = 14;
-  static constexpr uint8_t kMaxDots = 8;
+  static constexpr uint8_t kMaxDots = 12;
+  static constexpr uint8_t kMaxWaves = 16;
   static constexpr uint8_t kMaxVertexPathLen = 32;
 
   // Colors are in RGB space; note some hardware may be GRB ordered.
-  static constexpr Rgb kInhaleDotColor{255, 80, 0};   // red-orange
-  static constexpr Rgb kExhaleWaveColor{120, 255, 180};  // light green-ish
-  static constexpr Rgb kInhalePauseColor{255, 80, 0};
-  static constexpr Rgb kExhalePauseColor{120, 255, 180};
+  // Requested: swap inhale/exhale colors (inhale uses previous exhale color, and vice versa).
+  static constexpr Rgb kInhaleDotColor{120, 255, 180};   // light green-ish
+  static constexpr Rgb kExhaleWaveColor{255, 80, 0};  // red-orange
+  static constexpr Rgb kInhalePauseColor{120, 255, 180};
+  static constexpr Rgb kExhalePauseColor{255, 80, 0};
 
   static constexpr uint8_t kTailLutLen = 16;
   static constexpr uint8_t kTailLut[kTailLutLen] = {
@@ -378,6 +389,9 @@ class BreathingEffect final : public IEffect {
     phase_complete_ = false;
     switch (phase_) {
       case Phase::Inhale:
+        inhale_cycles_done_ = 0;
+        inhale_cycles_target_ = cfg_.inhale_cycles_target ? cfg_.inhale_cycles_target : 1;
+        if (inhale_cycles_target_ > 50) inhale_cycles_target_ = 50;
         init_inhale(now_ms, /*advance_rr_offset=*/auto_transition_into_inhale, /*regenerate_paths=*/true);
         return;
       case Phase::Pause1:
@@ -442,6 +456,14 @@ class BreathingEffect final : public IEffect {
       if (v == center_vertex_id_) continue;
       if (dist_to_center_[v] == 0xFF) continue;
       cand[cand_len++] = v;
+    }
+
+    // Starts must be distinct and cannot include the center; clamp accordingly.
+    if (inhale_dot_count_ > cand_len) inhale_dot_count_ = cand_len;
+    if (inhale_dot_count_ == 0) {
+      inhale_all_done_ = true;
+      phase_complete_ = true;
+      return;
     }
 
     // Sort: dist desc, degree asc, vertex_id asc.
@@ -708,8 +730,13 @@ class BreathingEffect final : public IEffect {
         init_inhale(frame.now_ms, /*advance_rr_offset=*/false, /*regenerate_paths=*/false);
         inhale_all_done_ = false;
       } else {
-        phase_complete_ = true;
-        return;
+        inhale_cycles_done_ = static_cast<uint8_t>(inhale_cycles_done_ + 1U);
+        if (inhale_cycles_done_ >= inhale_cycles_target_) {
+          phase_complete_ = true;
+          return;
+        }
+        init_inhale(frame.now_ms, /*advance_rr_offset=*/false, /*regenerate_paths=*/true);
+        inhale_all_done_ = false;
       }
     }
 
@@ -745,12 +772,17 @@ class BreathingEffect final : public IEffect {
 
   void init_exhale(uint32_t now_ms) {
     (void)now_ms;
-    exhale_pos16_ = 0;
-    exhale_last_int_ = 0;
-    exhale_wave_complete_ = false;
-    for (uint8_t i = 0; i < outermost_count_; ++i) {
-      exhale_received_[i] = 0;
-      exhale_last_wave_seen_[i] = 0xFF;
+    exhale_global_q16_ = 0;
+    exhale_since_last_emit_q16_ = 0;
+    exhale_emitted_ = 0;
+    exhale_arrived_ = 0;
+    for (uint8_t i = 0; i < kMaxWaves; ++i) exhale_emit_pos_q16_[i] = 0;
+
+    // Emit the first wavefront immediately if configured to do so.
+    const uint8_t target = (cfg_.target_waves > kMaxWaves) ? kMaxWaves : cfg_.target_waves;
+    if (target > 0) {
+      exhale_emit_pos_q16_[0] = 0;
+      exhale_emitted_ = 1;
     }
   }
 
@@ -761,46 +793,31 @@ class BreathingEffect final : public IEffect {
       return;
     }
 
-    const uint32_t delta = static_cast<uint32_t>(cfg_.wave_speed_layers_q16) * dt;
-    exhale_pos16_ += delta;
+    const uint32_t delta_q16 = static_cast<uint32_t>(cfg_.wave_speed_layers_q16) * dt;
+    exhale_global_q16_ += delta_q16;
 
-    const uint32_t prev_int = exhale_last_int_;
-    const uint32_t cur_int = exhale_pos16_ >> 16;
-    exhale_last_int_ = cur_int;
-
-    // Process integer layer crossings (bounded).
-    uint32_t steps = 0;
-    for (uint32_t x = prev_int + 1; x <= cur_int && steps < 64; ++x, ++steps) {
-      const uint32_t wave_span = static_cast<uint32_t>(d_max_) + 1U;
-      const uint32_t wave_id = x / wave_span;
-      const uint32_t layer = x % wave_span;
-      if (layer != d_max_) continue;
-      for (uint8_t i = 0; i < outermost_count_; ++i) {
-        if (exhale_last_wave_seen_[i] == wave_id) continue;
-        exhale_last_wave_seen_[i] = static_cast<uint8_t>(wave_id);
-        if (exhale_received_[i] < cfg_.target_waves) {
-          exhale_received_[i] = static_cast<uint8_t>(exhale_received_[i] + 1U);
-        }
-      }
+    // Emit wavefronts when the most recently emitted wavefront has traveled ~spacing.
+    const uint8_t target = (cfg_.target_waves > kMaxWaves) ? kMaxWaves : cfg_.target_waves;
+    const uint32_t spacing_q16 = cfg_.wave_spacing_layers_q16 ? cfg_.wave_spacing_layers_q16 : (1u << 16);
+    exhale_since_last_emit_q16_ += delta_q16;
+    while (exhale_emitted_ < target && exhale_emitted_ < kMaxWaves && exhale_since_last_emit_q16_ >= spacing_q16) {
+      exhale_since_last_emit_q16_ -= spacing_q16;
+      exhale_emit_pos_q16_[exhale_emitted_] = exhale_global_q16_;
+      exhale_emitted_ = static_cast<uint8_t>(exhale_emitted_ + 1U);
     }
 
-    // Completion condition: all outermost vertices received target waves.
-    exhale_wave_complete_ = true;
-    for (uint8_t i = 0; i < outermost_count_; ++i) {
-      if (exhale_received_[i] < cfg_.target_waves) {
-        exhale_wave_complete_ = false;
-        break;
-      }
+    // Track how many wavefronts have reached the outer edge (by radius).
+    const uint32_t edge_q16 = static_cast<uint32_t>(d_max_) << 16;
+    while (exhale_arrived_ < exhale_emitted_) {
+      const uint32_t r = exhale_global_q16_ - exhale_emit_pos_q16_[exhale_arrived_];
+      if (r < edge_q16) break;
+      exhale_arrived_ = static_cast<uint8_t>(exhale_arrived_ + 1U);
     }
-    if (exhale_wave_complete_ && !manual_enabled_) {
+
+    // Completion: stop emitting after N wavefronts, then finish when the last reaches the edge.
+    if (!manual_enabled_ && target > 0 && exhale_emitted_ >= target && exhale_arrived_ >= target) {
       phase_complete_ = true;
     }
-
-    // Visual: emphasize a band around current radius (distance layer).
-    const uint16_t span = static_cast<uint16_t>(d_max_ + 1U);
-    const uint16_t layer_int = static_cast<uint16_t>((cur_int % span));
-    const uint16_t layer_frac = static_cast<uint16_t>(exhale_pos16_ & 0xFFFFu);
-    const uint32_t radius_q16 = (static_cast<uint32_t>(layer_int) << 16) | layer_frac;
     const uint16_t bw_q16 = cfg_.exhale_band_width_q16 ? cfg_.exhale_band_width_q16 : 1;
 
     const uint8_t* seg = MappingTables::global_to_seg();
@@ -824,13 +841,15 @@ class BreathingEffect final : public IEffect {
           ((static_cast<uint32_t>(da) * (kLedsPerSegment - 1U - ab_k) + static_cast<uint32_t>(db) * ab_k) << 16) /
           (kLedsPerSegment - 1U);
 
-      const uint32_t diff = (d_led_q16 > radius_q16) ? (d_led_q16 - radius_q16) : (radius_q16 - d_led_q16);
-      if (diff >= static_cast<uint32_t>(bw_q16)) continue;
-      const uint32_t amp_q16 = (static_cast<uint32_t>(bw_q16 - diff) << 16) / bw_q16;  // 0..1
-      const uint8_t v = static_cast<uint8_t>(
-          (amp_q16 * frame.params.brightness) >> 16);
-      if (v == 0) continue;
-      blend_max(out, i, scale(kExhaleWaveColor, v));
+      for (uint8_t w = 0; w < exhale_emitted_; ++w) {
+        const uint32_t radius_q16 = exhale_global_q16_ - exhale_emit_pos_q16_[w];
+        const uint32_t diff = (d_led_q16 > radius_q16) ? (d_led_q16 - radius_q16) : (radius_q16 - d_led_q16);
+        if (diff >= static_cast<uint32_t>(bw_q16)) continue;
+        const uint32_t amp_q16 = (static_cast<uint32_t>(bw_q16 - diff) << 16) / bw_q16;  // 0..1
+        const uint8_t v = static_cast<uint8_t>((amp_q16 * frame.params.brightness) >> 16);
+        if (v == 0) continue;
+        blend_max(out, i, scale(kExhaleWaveColor, v));
+      }
     }
   }
 
@@ -961,13 +980,15 @@ class BreathingEffect final : public IEffect {
   Dot dots_[kMaxDots] = {};
   uint8_t inhale_dot_count_ = 0;
   bool inhale_all_done_ = false;
+  uint8_t inhale_cycles_target_ = 1;
+  uint8_t inhale_cycles_done_ = 0;
 
   // EXHALE state.
-  uint32_t exhale_pos16_ = 0;
-  uint32_t exhale_last_int_ = 0;
-  uint8_t exhale_received_[kMaxVertices] = {};
-  uint8_t exhale_last_wave_seen_[kMaxVertices] = {};
-  bool exhale_wave_complete_ = false;
+  uint32_t exhale_global_q16_ = 0;
+  uint32_t exhale_since_last_emit_q16_ = 0;
+  uint32_t exhale_emit_pos_q16_[kMaxWaves] = {};
+  uint8_t exhale_emitted_ = 0;
+  uint8_t exhale_arrived_ = 0;
 
   // PAUSE state.
   uint8_t pause_beats_target_ = 0;
