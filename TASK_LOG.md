@@ -847,6 +847,20 @@ Files touched:
 Proof-of-life:
 - `wc -l breath_pattern_improvement_implementation_plan.md` → `679`
 
+### 2026-01-07 — Mode 7 plan v2.5 consistency pass (rr_offset semantics in config)
+
+Status: 🟢 Done
+
+What was done:
+- Updated the v2.5 plan’s configuration section to explicitly include `s/S` behavior for `center_lane_rr_offset` (in addition to auto/ESC advancement) to keep semantics consistent across §5.3.1, §9.2, §11, and tests.
+
+Files touched:
+- breath_pattern_improvement_implementation_plan.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `wc -l breath_pattern_improvement_implementation_plan.md` → `682`
+
 ### 2026-01-05 — Runtime: “Seven_Comets” per-comet sequences (unique lengths + independent rerolls)
 
 Status: 🟢 Done

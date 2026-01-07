@@ -566,7 +566,10 @@ The following defaults remove ambiguity and make the plan implementable without 
   - primary: `CENTER_VERTEX_ID` if configured and valid for the active subgraph,
   - fallback: computed graph center by minimax eccentricity with tie-break `min vertex_id`.
 - Center-lane rotation:
-  - `center_lane_rr_offset` advances only when INHALE is initialized in auto mode (auto transition into INHALE, or `ESC` reset).
+  - `center_lane_rr_offset` advances when INHALE is initialized in auto mode (auto transition into INHALE, or `ESC` reset).
+  - `center_lane_rr_offset` also advances in manual INHALE lane stepping:
+    - `s`: `offset = (offset + 1) % lane_count`
+    - `S`: `offset = (offset + lane_count - 1) % lane_count`
   - `center_lane_rr_offset` does not advance on manual phase stepping (`n` / `N`).
 
 ---
