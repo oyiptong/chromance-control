@@ -135,28 +135,66 @@ To follow “connecting segments”, firmware needs the segment endpoints in ver
 
 Today this segment list exists in Python (`scripts/generate_ledmap.py::SEGMENTS`) and in docs (`docs/architecture/wled_integration_implementation_plan.md` / `mapping/README_wiring.md`), but **not as a reusable C++ structure**.
 
-#### Recommended approach (generator-driven)
-Extend the mapping header generator (`scripts/generate_ledmap.py --out-header`) to emit, at minimum:
+#### Recommended approach (generator-driven; shared infrastructure for future patterns)
+Extend the mapping header generator (`scripts/generate_ledmap.py --out-header`) to emit a **stable vertex list** and **per-segment endpoints** in terms of `vertex_id`.
+
+This is not “Mode 7 specific”: once topology is emitted into `include/generated/chromance_mapping_*.h`, any future topology-aware pattern (vertex routing, hex fills, wavefronts, vertex diagnostics, etc.) can consume the same canonical data without copying topology into C++ by hand.
+
+##### 4.1.1 Define vertex IDs (stable)
+Emit:
+- `constexpr uint8_t VERTEX_COUNT = ...;`
+- `constexpr int8_t vertex_vx[VERTEX_COUNT];`
+- `constexpr int8_t vertex_vy[VERTEX_COUNT];`
+
+Generator stability rule:
+- Build the unique vertex set from the canonical `SEGMENTS` list.
+- Sort lexicographically by `(vx, vy)` and emit in that order.
+- Define `vertex_id` as the index into `(vertex_vx, vertex_vy)`.
+
+##### 4.1.2 Emit segment endpoints as vertex IDs
+Emit, indexed by `segId` (1..40; index 0 unused):
 - `constexpr uint8_t SEGMENT_COUNT = 40;`
-- `constexpr int8_t seg_va_x[SEGMENT_COUNT+1]`, `seg_va_y[...]`
-- `constexpr int8_t seg_vb_x[...]`, `seg_vb_y[...]`
+- `constexpr uint8_t seg_vertex_a[SEGMENT_COUNT + 1];`
+- `constexpr uint8_t seg_vertex_b[SEGMENT_COUNT + 1];`
 
-Rationale:
-- Avoid duplicating the SEGMENTS list in C++ by hand.
-- Ensure breathing mode always matches the generator’s canonical topology.
+Optional debug-friendly redundancy (not required once you trust vertex IDs):
+- `seg_va_x/seg_va_y/seg_vb_x/seg_vb_y` arrays (or a packed struct).
 
-Optional / nice-to-have generator output (not required for v2):
-- per-vertex adjacency lists
-- precomputed BFS distances (e.g., `dist_to_center` for the chosen center)
+##### 4.1.3 Segment presence (bench vs full)
+The emitted topology describes the full canonical sculpture graph, but each firmware build (bench/full) should treat only “present segments” as active edges:
+- Determine `present[segId]` by scanning `MappingTables::global_to_seg()` and marking any referenced segment IDs as present.
+
+This makes the same topology tables safe in:
+- `CHROMANCE_BENCH_MODE` subsets (missing segments/vertices),
+- full builds,
+- and any future partial deployments.
+
+##### 4.1.4 Canonical “A→B coordinate” for LEDs on a segment (directional patterns)
+Directional vertex/segment effects need a canonical coordinate along each segment that is independent of wiring direction.
+
+Use existing mapping tables:
+- `global_to_seg_k[i]` (0..13) is the LED coordinate along the **wiring** direction,
+- `global_to_dir[i]` indicates whether wiring is `a_to_b` (0) or `b_to_a` (1) relative to the generator’s canonical `(A,B)`.
+
+Define:
+```text
+ab_k(i) = (global_to_dir[i] == 0) ? global_to_seg_k[i] : (13 - global_to_seg_k[i])
+```
+Properties:
+- `ab_k == 0` is nearest vertex A.
+- `ab_k == 13` is nearest vertex B.
+
+This single rule enables:
+- Mode 7 path expansion in topology direction,
+- “light toward a vertex” diagnostics (planned below),
+- and future wavefront / gradient effects anchored at topology endpoints.
+
+##### 4.1.5 Core accessors (portable)
+Extend `src/core/mapping/mapping_tables.h` to expose the generated topology arrays:
+- `vertex_count()`, `vertex_vx()`, `vertex_vy()`
+- `seg_vertex_a()`, `seg_vertex_b()`
 
 Runtime BFS on the MCU is acceptable here due to the small graph size; precomputing distances in Python is an optimization only.
-
-Then add C++ accessors (portable) in core, e.g.:
-- `core/mapping/mapping_tables.h` gains accessors for these arrays when present.
-
-Fallback (if we don’t want to touch generator yet):
-- Add a small `src/core/topology/segments.h` with the SEGMENTS list copied from the plan.
-- Risk: drift vs generator; mitigated with a host test that asserts equivalence (but that also requires parsing the generator list).
 
 ### 4.2 Boundary vertices and “outer segments”
 Compute from the vertex graph:
@@ -367,10 +405,10 @@ When manual mode is enabled:
 
 ### Topology data availability (recommended)
 - `scripts/generate_ledmap.py`
-  - Emit segment endpoint arrays into `--out-header` output.
+  - Emit stable vertex list + per-segment endpoint vertex IDs into `--out-header` output (shared infrastructure).
 - `include/generated/chromance_mapping_*.h` (generated; do not hand-edit)
 - `src/core/mapping/mapping_tables.h`
-  - Expose generated segment endpoint arrays to core if present.
+  - Expose generated topology arrays (`vertex_*`, `seg_vertex_*`) to core if present.
 
 ### Runtime wiring (controls already exist)
 - `src/main_runtime.cpp`
@@ -402,13 +440,114 @@ Determinism requirements:
 2) Center-adjacent arrival:
    - confirm whether to keep the default “arrive at center vertex”, or enable “arrive at dist==1 ring” for visual reasons.
 
+3) Center selection (configurable center vertex):
+   - confirm whether center should be configured as a `(vx,vy)` coordinate (human-friendly) or as a generated `vertex_id` (compact/stable).
+
 ---
 
 ## 12) Suggested incremental rollout
 
-1) Introduce segment endpoint arrays into generated headers (topology available in firmware).
-2) Implement topology-based graph + `dist_to_center` computation in breathing mode.
-3) Implement inhale path generation and smooth dot rendering (completion-driven).
-4) Implement pause phases with beat-count completion and cyclical envelope.
-5) Implement exhale wavefront accounting and completion condition; tune visuals.
-6) Add native tests for invariants and deterministic behavior.
+1) Introduce generated topology tables (vertex list + segment endpoint vertex IDs) into mapping headers (shared infrastructure).
+2) Add a small portable “topology view” utility in core (build active graph from present segments; degrees/boundary; BFS distances).
+3) Implement configurable center selection policy for Mode 7 using vertex IDs (fixed and future-random).
+4) Implement inhale path generation and smooth dot rendering (completion-driven).
+5) Implement pause phases with beat-count completion and cyclical envelope.
+6) Implement exhale wavefront accounting and completion condition; tune visuals.
+7) Add native tests for topology invariants + deterministic behavior.
+
+---
+
+## 13) Diagnostic plan (Mode 1 / Index Walk): “Vertex incident segments” scan
+
+Goal: add a new diagnostic scan mode under the existing Mode 1 (`Index_Walk_Test`) that validates **vertex connectivity** and **segment endpoint orientation**:
+- For each vertex, light all segments incident to that vertex.
+- Within each lit segment, LEDs “fill” progressively **toward** the vertex (from the far endpoint into the vertex).
+- Allow deterministic manual stepping across vertices and directions for mapping correction.
+
+This diagnostic is intentionally topology-driven and is a second consumer (after Mode 7) of the generator-based topology tables in §4.1. It is also a reusable primitive for future patterns (“flood from a vertex”, “wavefronts”, “vertex pulses”, etc.).
+
+### 13.1 Current Mode 1 implementation (context to modify)
+Mode 1 is implemented in `src/core/effects/pattern_index_walk.h`. It currently supports:
+- `INDEX`: existing global LED index walk
+- `LTR/UTD` and `RTL/DTU`: per-segment scan derived from `MappingTables::pixel_x/pixel_y` and `global_to_seg`
+
+Relevant excerpt (existing scan-mode structure):
+```cpp
+enum class ScanMode : uint8_t { kIndex, kTopoLtrUtd, kTopoRtlDtu };
+// build_topo_sequences(): groups indices by segId then sorts each group by x/y axis
+```
+
+### 13.2 Add a new scan mode: `VERTEX_TOWARD`
+Add:
+- `ScanMode::kVertexToward` (name in serial logs: `VERTEX_TOWARD` or `VERTEX`)
+
+Behavior:
+- The scan iterates **vertex IDs**, not LED indices.
+- For each selected vertex:
+  - all incident segments are lit (subject to “present segment” filtering),
+  - each incident segment fills from far end toward the selected vertex.
+
+### 13.3 Topology data required (provided by generator-based approach)
+Uses §4.1 outputs:
+- `vertex_vx/vertex_vy` and `VERTEX_COUNT`
+- `seg_vertex_a/seg_vertex_b`
+- present-segment detection by scanning `global_to_seg`
+
+### 13.4 Build “incident segment lists” for vertices
+At effect reset (or on first render), build adjacency for the active subgraph:
+- Initialize `incident_count[VERTEX_COUNT]=0`.
+- For each `segId` where `present[segId]==true`:
+  - `va = seg_vertex_a[segId]`, `vb = seg_vertex_b[segId]`
+  - append `segId` to both `incident[va]` and `incident[vb]`
+
+Implementation detail:
+- Use fixed-size arrays; the graph is tiny and bounded.
+- Determine `MAX_DEGREE` from the canonical topology (or conservatively set to a small upper bound and assert if exceeded in native tests).
+
+### 13.5 Per-LED rule: fill “toward the vertex”
+For each LED index `i`, you have:
+- `seg = global_to_seg[i]` (skip if 0 or not incident)
+- `seg_k = global_to_seg_k[i]` (0..13)
+- `dir = global_to_dir[i]` (0=a_to_b, 1=b_to_a relative to canonical topology endpoints)
+
+Compute canonical coordinate along topology endpoint A:
+```text
+ab_k(i) = (dir == 0) ? seg_k : (13 - seg_k)   // 0 near A, 13 near B
+```
+
+Let `p` be the fill progress (0..14), where `p==0` means nothing lit and `p==14` means the whole segment lit.
+
+Then:
+- If `selected_vertex_id == seg_vertex_a[seg]` (vertex at A):
+  - fill is from B → A, so light LEDs with `ab_k >= (14 - p)`
+- If `selected_vertex_id == seg_vertex_b[seg]` (vertex at B):
+  - fill is from A → B, so light LEDs with `ab_k <= (p - 1)`
+
+This makes direction visually unambiguous and directly tests whether endpoint A/B semantics match reality.
+
+### 13.6 Auto-cycle vs manual stepping (n/N/ESC)
+Add a “manual hold” behavior consistent with the established convention used in modes 2/6/7:
+- Auto:
+  - iterate through all vertex IDs that have `incident_count>0` (active subgraph),
+  - run a short fill animation per vertex (e.g., fill for ~1s then advance).
+- Manual:
+  - `n`: next vertex id in the active set, stay there (fill repeats)
+  - `N`: previous vertex id in the active set, stay there
+  - `ESC`: return to Mode 1’s existing `INDEX` auto behavior
+
+Note: you can also make `n/N` cycle scan modes forward/backward when not in manual vertex stepping; decide once and keep consistent in serial UX.
+
+### 13.7 Serial logging (required)
+Whenever the active vertex changes (auto or manual), print:
+- scan mode name (e.g., `VERTEX_TOWARD`)
+- `vertex=<id> (vx,vy)`
+- incident segment list: `segs=[s1,s2,...]`
+
+Optional high-signal additions:
+- For each incident segment, print whether the selected vertex is endpoint A or B (`seg=12 end=A`), to make endpoint validation explicit.
+
+### 13.8 Native tests (recommended)
+Add deterministic tests for the vertex diagnostic logic (portable core):
+- adjacency building correctness (incident segments for a known vertex id)
+- `ab_k` computation invariants (for any LED on a segment, `ab_k` spans 0..13 exactly once)
+- fill-to-vertex rule lights monotone toward the endpoint (for both A and B endpoints)

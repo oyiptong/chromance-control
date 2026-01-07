@@ -783,6 +783,22 @@ Files touched:
 Proof-of-life:
 - `pio test -e native`: PASSED (44 test cases)
 
+### 2026-01-07 — Decision: generator-based topology tables (vertex IDs) for Mode 7 + future patterns
+
+Status: 🔵 Decision
+
+What was done:
+- Updated the Mode 7 breathing improvement plan to commit to a generator-based topology data model (stable `vertex_id` + per-segment endpoint vertex IDs) emitted into mapping headers and exposed via `MappingTables`.
+- Documented how to derive a canonical per-LED segment coordinate (`ab_k`) using existing `global_to_seg_k` and `global_to_dir`, enabling endpoint-directional effects without guessing wiring direction.
+- Added a comprehensive implementation plan for a new Mode 1 diagnostic scan mode (“Vertex incident segments”) that lights all segments attached to a vertex and fills LEDs toward the vertex, using the generated topology tables; includes serial logging and native-test plan.
+
+Files touched:
+- breath_pattern_improvement_implementation_plan.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `wc -l breath_pattern_improvement_implementation_plan.md` → `553`
+
 ### 2026-01-05 — Runtime: “Seven_Comets” per-comet sequences (unique lengths + independent rerolls)
 
 Status: 🟢 Done
