@@ -35,6 +35,8 @@ void test_mapping_tables_dimensions_and_counts();
 void test_mapping_tables_global_indices_are_consistent();
 
 void test_index_walk_effect_lights_one_pixel_and_wraps();
+void test_index_walk_effect_scan_mode_cycles_and_auto_resets();
+void test_index_walk_effect_topology_scan_orders_leds_within_segments_by_axis();
 void test_xy_scan_effect_uses_scan_order();
 void test_coord_color_effect_matches_expected_formula_and_scales_brightness();
 void test_rainbow_pulse_fades_and_holds();
@@ -95,6 +97,8 @@ int main(int argc, char** argv) {
   RUN_TEST(test_mapping_tables_global_indices_are_consistent);
 
   RUN_TEST(test_index_walk_effect_lights_one_pixel_and_wraps);
+  RUN_TEST(test_index_walk_effect_scan_mode_cycles_and_auto_resets);
+  RUN_TEST(test_index_walk_effect_topology_scan_orders_leds_within_segments_by_axis);
   RUN_TEST(test_xy_scan_effect_uses_scan_order);
   RUN_TEST(test_coord_color_effect_matches_expected_formula_and_scales_brightness);
   RUN_TEST(test_rainbow_pulse_fades_and_holds);

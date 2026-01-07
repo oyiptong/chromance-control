@@ -733,6 +733,20 @@ Proof-of-life:
 - `pio test -e native`: PASSED (35 test cases)
 - `pio run -e runtime`: SUCCESS
 
+### 2026-01-07 — Mode 7 “Breathing” plan v2 clarifications
+
+Status: 🔵 Decision
+
+What was done:
+- Updated the Mode 7 breathing implementation plan to explicitly default to boundary-local path disjointness (first K steps) rather than full global edge-disjointness, and to clarify center tie-break + arrival semantics.
+- Strengthened the exhale wavefront accounting plan to be layer-based so wavefront counts cannot skip segments under low FPS / large `dt`.
+- Updated the plan-improvement prompt to match the v2 defaults (K=2, range 1–3) and required test/determinism coverage.
+
+Files touched:
+- breath_pattern_improvement_implementation_plan.md
+- breath_pattern_improvement_implementation_plan_improvement_prompt.md
+- TASK_LOG.md
+
 ### 2026-01-06 — Mode 7: breathing improvement report + implementation plan
 
 Status: 🟢 Done
@@ -748,6 +762,26 @@ Files touched:
 
 Proof-of-life:
 - `wc -l breath_pattern_improvement_implementation_plan.md` → `381`
+
+### 2026-01-07 — Runtime: Mode 1 scan-mode cycling (topology LTR/UTD, RTL/DTU, INDEX)
+
+Status: 🟢 Done
+
+What was done:
+- Extended Mode 1 (`Index_Walk_Test`) with 3 scan modes toggled by `n`: `LTR/UTD` (per-segment scan using pixel topology coords), `RTL/DTU`, and the existing global `INDEX` walk.
+- Added `ESC` handling in Mode 1 to return to `INDEX` behavior.
+- Updated serial banner logging to include the current scan mode name and the active `seg` ID.
+- Added native unit tests covering scan-mode cycling and per-segment axis ordering for topology scans.
+
+Files touched:
+- src/core/effects/pattern_index_walk.h
+- src/main_runtime.cpp
+- test/test_effect_patterns.cpp
+- test/test_main.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (44 test cases)
 
 ### 2026-01-05 — Runtime: “Seven_Comets” per-comet sequences (unique lengths + independent rerolls)
 

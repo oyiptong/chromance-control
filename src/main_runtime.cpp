@@ -55,6 +55,8 @@ uint32_t last_banner_ms = 0;
 uint8_t last_hrv_hex = 0xFF;
 uint8_t last_strip_segment_k = 0xFF;
 bool mode2_hold = false;
+uint8_t last_indexwalk_scan_mode = 0xFF;
+uint8_t last_indexwalk_seg = 0xFF;
 
 void print_brightness() {
   const uint8_t soft = settings.brightness_percent();
@@ -182,6 +184,11 @@ void print_strip_segment_stepper_state() {
   Serial.println();
 }
 
+void print_index_walk_scan_mode() {
+  Serial.print("Index walk scan mode: ");
+  Serial.println(index_walk.scan_mode_name());
+}
+
 }  // namespace
 
 void setup() {
@@ -208,7 +215,7 @@ void setup() {
       settings.brightness_percent(), chromance::core::kHardwareBrightnessCeilingPercent);
 
   Serial.println(
-      "Commands: 1=Index_Walk_Test 2=Strip_Segment_Stepper 3=Coord_Color_Test 4=Rainbow_Pulse 5=Seven_Comets 6=HRV_hexagon 7=Breathing n=next(mode2/6/7) N=prev(mode2/6/7) esc=auto(mode2/6/7) +=brightness_up -=brightness_down");
+      "Commands: 1=Index_Walk_Test 2=Strip_Segment_Stepper 3=Coord_Color_Test 4=Rainbow_Pulse 5=Seven_Comets 6=HRV_hexagon 7=Breathing n=next(mode1/2/6/7) N=prev(mode2/6/7) esc=auto(mode1/2/6/7) +=brightness_up -=brightness_down");
   Serial.print("Restored mode: ");
   Serial.println(static_cast<unsigned>(settings.mode()));
   print_brightness();
@@ -229,7 +236,14 @@ void loop() {
     if (c == '6') select_mode(6);
     if (c == '7') select_mode(7);
     if (c == 'n') {
-      if (current_mode == 2) {
+      if (current_mode == 1) {
+        index_walk.cycle_scan_mode(now_ms);
+        last_banner_led = 0xFFFF;
+        last_indexwalk_scan_mode = 0xFF;
+        last_indexwalk_seg = 0xFF;
+        last_banner_ms = 0;
+        print_index_walk_scan_mode();
+      } else if (current_mode == 2) {
         strip_segment_stepper.next(now_ms);
         strip_segment_stepper.set_auto_advance_enabled(false, now_ms);
         mode2_hold = true;
@@ -257,7 +271,14 @@ void loop() {
       }
     }
     if (c == 27) {  // ESC
-      if (current_mode == 2) {
+      if (current_mode == 1) {
+        index_walk.set_auto(now_ms);
+        last_banner_led = 0xFFFF;
+        last_indexwalk_scan_mode = 0xFF;
+        last_indexwalk_seg = 0xFF;
+        last_banner_ms = 0;
+        print_index_walk_scan_mode();
+      } else if (current_mode == 2) {
         strip_segment_stepper.set_auto_advance_enabled(true, now_ms);
         mode2_hold = false;
       } else if (current_mode == 7) {
@@ -320,31 +341,32 @@ void loop() {
   // Print a small banner for note-taking while physically validating wiring.
   // Throttle to avoid spamming the UART.
   if (current_effect == &index_walk) {
-    uint16_t lit = 0xFFFF;
-    for (uint16_t i = 0; i < kLedCount; ++i) {
-      if (rgb[i].r || rgb[i].g || rgb[i].b) {
-        lit = i;
-        break;
-      }
-    }
-    if (lit != 0xFFFF && lit != last_banner_led &&
-        static_cast<int32_t>(now_ms - last_banner_ms) >= 250) {
+    const uint16_t lit = index_walk.active_index();
+    const uint8_t seg = index_walk.active_seg();
+    const uint8_t scan_mode = static_cast<uint8_t>(index_walk.scan_mode());
+    if (static_cast<int32_t>(now_ms - last_banner_ms) >= 250 &&
+        (lit != last_banner_led || seg != last_indexwalk_seg || scan_mode != last_indexwalk_scan_mode)) {
       last_banner_led = lit;
+      last_indexwalk_seg = seg;
+      last_indexwalk_scan_mode = scan_mode;
       last_banner_ms = now_ms;
 
       const uint8_t strip = chromance::core::MappingTables::global_to_strip()[lit];
       const uint16_t local = chromance::core::MappingTables::global_to_local()[lit];
-      const uint8_t seg = chromance::core::MappingTables::global_to_seg()[lit];
       const uint8_t k = chromance::core::MappingTables::global_to_seg_k()[lit];
       const uint8_t dir = chromance::core::MappingTables::global_to_dir()[lit];
 
-      const uint16_t seg_in_strip = static_cast<uint16_t>(local / chromance::core::kLedsPerSegment);
-      const uint8_t local_in_seg = static_cast<uint8_t>(local % chromance::core::kLedsPerSegment);
+      const uint16_t seg_in_strip =
+          static_cast<uint16_t>(local / chromance::core::kLedsPerSegment);
+      const uint8_t local_in_seg =
+          static_cast<uint8_t>(local % chromance::core::kLedsPerSegment);
 
-      Serial.print("i=");
-      Serial.print(lit);
+      Serial.print("IndexWalk ");
+      Serial.print(index_walk.scan_mode_name());
       Serial.print(" seg=");
       Serial.print(seg);
+      Serial.print(" i=");
+      Serial.print(lit);
       Serial.print(" k=");
       Serial.print(k);
       Serial.print(" dir=");

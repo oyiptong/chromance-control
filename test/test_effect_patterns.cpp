@@ -12,6 +12,7 @@
 #include "core/effects/pattern_strip_segment_stepper.h"
 #include "core/effects/pattern_two_dots.h"
 #include "core/effects/pattern_xy_scan.h"
+#include "core/mapping/mapping_tables.h"
 #include "core/mapping/pixels_map.h"
 
 using chromance::core::CoordColorEffect;
@@ -79,6 +80,120 @@ void test_index_walk_effect_lights_one_pixel_and_wraps() {
     const bool lit = out[i].r || out[i].g || out[i].b;
     TEST_ASSERT_TRUE((i == 0) == lit);
   }
+}
+
+void test_index_walk_effect_scan_mode_cycles_and_auto_resets() {
+  IndexWalkEffect e(10);
+  e.reset(0);
+
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(IndexWalkEffect::ScanMode::kIndex),
+                          static_cast<uint8_t>(e.scan_mode()));
+  TEST_ASSERT_EQUAL_STRING("INDEX", e.scan_mode_name());
+
+  e.cycle_scan_mode(0);
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(IndexWalkEffect::ScanMode::kTopoLtrUtd),
+                          static_cast<uint8_t>(e.scan_mode()));
+  TEST_ASSERT_EQUAL_STRING("LTR/UTD", e.scan_mode_name());
+
+  e.cycle_scan_mode(0);
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(IndexWalkEffect::ScanMode::kTopoRtlDtu),
+                          static_cast<uint8_t>(e.scan_mode()));
+  TEST_ASSERT_EQUAL_STRING("RTL/DTU", e.scan_mode_name());
+
+  e.cycle_scan_mode(0);
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(IndexWalkEffect::ScanMode::kIndex),
+                          static_cast<uint8_t>(e.scan_mode()));
+
+  e.cycle_scan_mode(0);
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(IndexWalkEffect::ScanMode::kTopoLtrUtd),
+                          static_cast<uint8_t>(e.scan_mode()));
+
+  e.set_auto(0);
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(IndexWalkEffect::ScanMode::kIndex),
+                          static_cast<uint8_t>(e.scan_mode()));
+  TEST_ASSERT_EQUAL_STRING("INDEX", e.scan_mode_name());
+}
+
+void test_index_walk_effect_topology_scan_orders_leds_within_segments_by_axis() {
+  PixelsMap map;
+  EffectFrame frame;
+  frame.params.brightness = 255;
+
+  const size_t led_count = map.led_count();
+  std::vector<Rgb> out(led_count);
+
+  IndexWalkEffect e(1);
+  e.reset(0);
+  e.cycle_scan_mode(0);  // Index -> LTR/UTD topology scan
+
+  std::vector<uint16_t> seq(led_count);
+  for (uint32_t t = 0; t < led_count; ++t) {
+    frame.now_ms = t;
+    e.render(frame, map, out.data(), out.size());
+    seq[static_cast<size_t>(t)] = e.active_index();
+  }
+
+  // Permutation of [0..led_count-1]
+  std::vector<bool> seen(led_count, false);
+  for (const uint16_t idx : seq) {
+    TEST_ASSERT_TRUE(idx < led_count);
+    TEST_ASSERT_FALSE(seen[idx]);
+    seen[idx] = true;
+  }
+
+  auto assert_segment_sorted = [&](uint8_t seg_id, bool reverse) {
+    // Find contiguous group in the topo scan sequence (segId order).
+    size_t start = led_count;
+    size_t count = 0;
+    for (size_t i = 0; i < led_count; ++i) {
+      const uint8_t s = chromance::core::MappingTables::global_to_seg()[seq[i]];
+      if (s == seg_id) {
+        if (start == led_count) start = i;
+        ++count;
+      } else if (start != led_count) {
+        break;
+      }
+    }
+    TEST_ASSERT_TRUE(start != led_count);
+    TEST_ASSERT_EQUAL_UINT32(14, static_cast<uint32_t>(count));
+
+    // Match the effect's vertical detection: x span ~0 => vertical => use y axis.
+    int16_t min_x = chromance::core::MappingTables::pixel_x()[seq[start]];
+    int16_t max_x = min_x;
+    for (size_t i = 1; i < count; ++i) {
+      const int16_t x = chromance::core::MappingTables::pixel_x()[seq[start + i]];
+      if (x < min_x) min_x = x;
+      if (x > max_x) max_x = x;
+    }
+    const bool vertical = static_cast<int16_t>(max_x - min_x) <= 1;
+
+    int16_t prev = reverse ? 32767 : -32768;
+    for (size_t i = 0; i < count; ++i) {
+      const uint16_t idx = seq[start + i];
+      const int16_t axis = vertical ? chromance::core::MappingTables::pixel_y()[idx]
+                                    : chromance::core::MappingTables::pixel_x()[idx];
+      if (reverse) {
+        TEST_ASSERT_TRUE(axis <= prev);
+      } else {
+        TEST_ASSERT_TRUE(axis >= prev);
+      }
+      prev = axis;
+    }
+  };
+
+  // Canonical topology segment IDs: seg 1 is vertical, seg 2 is angled/horizontal.
+  assert_segment_sorted(/*seg_id=*/1, /*reverse=*/false);
+  assert_segment_sorted(/*seg_id=*/2, /*reverse=*/false);
+
+  // RTL/DTU: reverse within each segment group.
+  e.cycle_scan_mode(0);  // LTR/UTD -> RTL/DTU
+  for (uint32_t t = 0; t < led_count; ++t) {
+    frame.now_ms = t;
+    e.render(frame, map, out.data(), out.size());
+    seq[static_cast<size_t>(t)] = e.active_index();
+  }
+  assert_segment_sorted(/*seg_id=*/1, /*reverse=*/true);
+  assert_segment_sorted(/*seg_id=*/2, /*reverse=*/true);
 }
 
 void test_xy_scan_effect_uses_scan_order() {
