@@ -57,6 +57,7 @@ uint8_t last_strip_segment_k = 0xFF;
 bool mode2_hold = false;
 uint8_t last_indexwalk_scan_mode = 0xFF;
 uint8_t last_indexwalk_seg = 0xFF;
+uint8_t last_indexwalk_vertex = 0xFF;
 
 void print_brightness() {
   const uint8_t soft = settings.brightness_percent();
@@ -189,6 +190,27 @@ void print_index_walk_scan_mode() {
   Serial.println(index_walk.scan_mode_name());
 }
 
+void print_index_walk_vertex_state() {
+  Serial.print("Index walk vertex: ");
+  Serial.print("V");
+  Serial.print(static_cast<unsigned>(index_walk.active_vertex_id()));
+  Serial.print(" (");
+  const uint8_t vid = index_walk.active_vertex_id();
+  const int8_t vx = chromance::core::MappingTables::vertex_vx()[vid];
+  const int8_t vy = chromance::core::MappingTables::vertex_vy()[vid];
+  Serial.print(static_cast<int>(vx));
+  Serial.print(",");
+  Serial.print(static_cast<int>(vy));
+  Serial.print(") segs=[");
+  const uint8_t n = index_walk.active_vertex_seg_count();
+  const uint8_t* segs = index_walk.active_vertex_segs();
+  for (uint8_t i = 0; i < n; ++i) {
+    if (i) Serial.print(",");
+    Serial.print(static_cast<unsigned>(segs[i]));
+  }
+  Serial.println("]");
+}
+
 }  // namespace
 
 void setup() {
@@ -215,7 +237,7 @@ void setup() {
       settings.brightness_percent(), chromance::core::kHardwareBrightnessCeilingPercent);
 
   Serial.println(
-      "Commands: 1=Index_Walk_Test 2=Strip_Segment_Stepper 3=Coord_Color_Test 4=Rainbow_Pulse 5=Seven_Comets 6=HRV_hexagon 7=Breathing n=next(mode1/2/6/7) N=prev(mode2/6/7) esc=auto(mode1/2/6/7) +=brightness_up -=brightness_down");
+      "Commands: 1=Index_Walk_Test 2=Strip_Segment_Stepper 3=Coord_Color_Test 4=Rainbow_Pulse 5=Seven_Comets 6=HRV_hexagon 7=Breathing n=next(mode1/2/6/7) N=prev(mode2/6/7) s/S=step(mode1) esc=auto(mode1/2/6/7) +=brightness_up -=brightness_down");
   Serial.print("Restored mode: ");
   Serial.println(static_cast<unsigned>(settings.mode()));
   print_brightness();
@@ -237,12 +259,23 @@ void loop() {
     if (c == '7') select_mode(7);
     if (c == 'n') {
       if (current_mode == 1) {
-        index_walk.cycle_scan_mode(now_ms);
-        last_banner_led = 0xFFFF;
-        last_indexwalk_scan_mode = 0xFF;
-        last_indexwalk_seg = 0xFF;
-        last_banner_ms = 0;
-        print_index_walk_scan_mode();
+        if (index_walk.in_vertex_mode()) {
+          index_walk.vertex_next(now_ms);
+          last_indexwalk_vertex = 0xFF;
+          last_banner_ms = 0;
+          print_index_walk_vertex_state();
+        } else {
+          index_walk.cycle_scan_mode(now_ms);
+          last_banner_led = 0xFFFF;
+          last_indexwalk_scan_mode = 0xFF;
+          last_indexwalk_seg = 0xFF;
+          last_indexwalk_vertex = 0xFF;
+          last_banner_ms = 0;
+          print_index_walk_scan_mode();
+          if (index_walk.in_vertex_mode()) {
+            print_index_walk_vertex_state();
+          }
+        }
       } else if (current_mode == 2) {
         strip_segment_stepper.next(now_ms);
         strip_segment_stepper.set_auto_advance_enabled(false, now_ms);
@@ -257,7 +290,14 @@ void loop() {
       }
     }
     if (c == 'N') {
-      if (current_mode == 2) {
+      if (current_mode == 1) {
+        if (index_walk.in_vertex_mode()) {
+          index_walk.vertex_prev(now_ms);
+          last_indexwalk_vertex = 0xFF;
+          last_banner_ms = 0;
+          print_index_walk_vertex_state();
+        }
+      } else if (current_mode == 2) {
         strip_segment_stepper.prev(now_ms);
         strip_segment_stepper.set_auto_advance_enabled(false, now_ms);
         mode2_hold = true;
@@ -270,12 +310,50 @@ void loop() {
         breathing.prev_phase(now_ms);
       }
     }
+    if (c == 's') {
+      if (current_mode == 1) {
+        if (index_walk.in_vertex_mode()) {
+          // Pause vertex selection (manual), but keep looping the fill animation.
+          index_walk.clear_manual_hold(now_ms);
+          index_walk.vertex_next(now_ms);
+          last_indexwalk_vertex = 0xFF;
+          last_banner_ms = (now_ms >= 250) ? (now_ms - 250) : 0;
+          print_index_walk_vertex_state();
+        } else {
+          index_walk.step_hold_next(now_ms);
+          last_banner_led = 0xFFFF;
+          last_indexwalk_scan_mode = 0xFF;
+          last_indexwalk_seg = 0xFF;
+          last_indexwalk_vertex = 0xFF;
+          last_banner_ms = (now_ms >= 250) ? (now_ms - 250) : 0;
+        }
+      }
+    }
+    if (c == 'S') {
+      if (current_mode == 1) {
+        if (index_walk.in_vertex_mode()) {
+          index_walk.clear_manual_hold(now_ms);
+          index_walk.vertex_prev(now_ms);
+          last_indexwalk_vertex = 0xFF;
+          last_banner_ms = (now_ms >= 250) ? (now_ms - 250) : 0;
+          print_index_walk_vertex_state();
+        } else {
+          index_walk.step_hold_prev(now_ms);
+          last_banner_led = 0xFFFF;
+          last_indexwalk_scan_mode = 0xFF;
+          last_indexwalk_seg = 0xFF;
+          last_indexwalk_vertex = 0xFF;
+          last_banner_ms = (now_ms >= 250) ? (now_ms - 250) : 0;
+        }
+      }
+    }
     if (c == 27) {  // ESC
       if (current_mode == 1) {
         index_walk.set_auto(now_ms);
         last_banner_led = 0xFFFF;
         last_indexwalk_scan_mode = 0xFF;
         last_indexwalk_seg = 0xFF;
+        last_indexwalk_vertex = 0xFF;
         last_banner_ms = 0;
         print_index_walk_scan_mode();
       } else if (current_mode == 2) {
@@ -344,12 +422,20 @@ void loop() {
     const uint16_t lit = index_walk.active_index();
     const uint8_t seg = index_walk.active_seg();
     const uint8_t scan_mode = static_cast<uint8_t>(index_walk.scan_mode());
+    const uint8_t vertex = index_walk.active_vertex_id();
     if (static_cast<int32_t>(now_ms - last_banner_ms) >= 250 &&
-        (lit != last_banner_led || seg != last_indexwalk_seg || scan_mode != last_indexwalk_scan_mode)) {
+        (lit != last_banner_led || seg != last_indexwalk_seg || scan_mode != last_indexwalk_scan_mode ||
+         vertex != last_indexwalk_vertex)) {
       last_banner_led = lit;
       last_indexwalk_seg = seg;
       last_indexwalk_scan_mode = scan_mode;
+      last_indexwalk_vertex = vertex;
       last_banner_ms = now_ms;
+
+      if (index_walk.in_vertex_mode()) {
+        print_index_walk_vertex_state();
+        return;
+      }
 
       const uint8_t strip = chromance::core::MappingTables::global_to_strip()[lit];
       const uint16_t local = chromance::core::MappingTables::global_to_local()[lit];

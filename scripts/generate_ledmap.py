@@ -250,6 +250,27 @@ def write_mapping_header(
         body = format_values(values, per_line=16)
         return f"constexpr uint16_t {name}[LED_COUNT] = {{\n{body}\n}};"
 
+    def arr_i8(name: str, values: Sequence[int], *, count_name: str) -> str:
+        body = format_values(values, per_line=24)
+        return f"constexpr int8_t {name}[{count_name}] = {{\n{body}\n}};"
+
+    def arr_u8_counted(name: str, values: Sequence[int], *, count_name: str) -> str:
+        body = format_values(values, per_line=24)
+        return f"constexpr uint8_t {name}[{count_name}] = {{\n{body}\n}};"
+
+    # Topology tables (canonical, shared across full/bench; filtering is done by segment presence).
+    # Vertex IDs are stable: unique (vx,vy) endpoints sorted lexicographically.
+    vertices = sorted({v for seg in SEGMENTS for v in seg})
+    vertex_id_by_coord: Dict[Tuple[int, int], int] = {v: i for i, v in enumerate(vertices)}
+    vertex_vx = [vx for (vx, _vy) in vertices]
+    vertex_vy = [vy for (_vx, vy) in vertices]
+
+    seg_vertex_a = [0]
+    seg_vertex_b = [0]
+    for (va, vb) in SEGMENTS:
+        seg_vertex_a.append(vertex_id_by_coord[va])
+        seg_vertex_b.append(vertex_id_by_coord[vb])
+
     header = "\n".join(
         [
             "#pragma once",
@@ -268,6 +289,9 @@ def write_mapping_header(
             f"constexpr uint16_t WIDTH = {int(width)};",
             f"constexpr uint16_t HEIGHT = {int(height)};",
             "",
+            f"constexpr uint8_t SEGMENT_COUNT = {len(SEGMENTS)};",
+            f"constexpr uint8_t VERTEX_COUNT = {len(vertices)};",
+            "",
             arr_int16("pixel_x", pixel_x),
             arr_int16("pixel_y", pixel_y),
             arr_u8("global_to_strip", global_to_strip),
@@ -275,6 +299,11 @@ def write_mapping_header(
             arr_u8("global_to_seg", global_to_seg),
             arr_u8("global_to_seg_k", global_to_seg_k),
             arr_u8("global_to_dir", global_to_dir),
+            "",
+            arr_i8("vertex_vx", vertex_vx, count_name="VERTEX_COUNT"),
+            arr_i8("vertex_vy", vertex_vy, count_name="VERTEX_COUNT"),
+            arr_u8_counted("seg_vertex_a", seg_vertex_a, count_name="SEGMENT_COUNT + 1"),
+            arr_u8_counted("seg_vertex_b", seg_vertex_b, count_name="SEGMENT_COUNT + 1"),
             "",
             "}  // namespace mapping",
             "}  // namespace chromance",

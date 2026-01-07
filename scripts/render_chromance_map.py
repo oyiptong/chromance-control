@@ -119,6 +119,7 @@ def write_svg(
     vertex_points: Sequence[Tuple[int, int, str]],
     scale: int,
     pad_units: int,
+    flip_x: bool = False,
 ) -> None:
     # Compute draw bounds (allow negative vertex coords).
     xs: List[float] = []
@@ -150,7 +151,7 @@ def write_svg(
     svg_h = int(view_h * scale)
 
     def tx(x: float) -> float:
-        return (x - min_x) * scale
+        return ((max_x - x) if flip_x else (x - min_x)) * scale
 
     def ty(y: float) -> float:
         # SVG y grows down; ledmap y grows down (row-major), so no inversion.
@@ -225,6 +226,10 @@ def main() -> int:
     ap.add_argument("--generator", type=Path, default=Path("scripts/generate_ledmap.py"))
     ap.add_argument("--out-svg", type=Path, default=Path("chromance_map.svg"))
     ap.add_argument("--out-png", type=Path, default=Path("chromance_map.png"))
+    ap.add_argument("--out-svg-front", type=Path, default=Path("chromance_map_front.svg"))
+    ap.add_argument("--out-png-front", type=Path, default=Path("chromance_map_front.png"))
+    ap.add_argument("--out-svg-back", type=Path, default=Path("chromance_map_back.svg"))
+    ap.add_argument("--out-png-back", type=Path, default=Path("chromance_map_back.png"))
     ap.add_argument("--scale", type=int, default=6)
     ap.add_argument("--pad", type=int, default=6, help="padding in ledmap units")
     args = ap.parse_args()
@@ -284,6 +289,34 @@ def main() -> int:
     )
     print(f"Wrote {args.out_svg}")
 
+    write_svg(
+        out_path=args.out_svg_back,
+        width_units=width,
+        height_units=height,
+        led_positions=led_positions,
+        seg_lines=seg_lines,
+        seg_labels=seg_labels,
+        vertex_points=vertex_points,
+        scale=args.scale,
+        pad_units=args.pad,
+        flip_x=False,
+    )
+    print(f"Wrote {args.out_svg_back}")
+
+    write_svg(
+        out_path=args.out_svg_front,
+        width_units=width,
+        height_units=height,
+        led_positions=led_positions,
+        seg_lines=seg_lines,
+        seg_labels=seg_labels,
+        vertex_points=vertex_points,
+        scale=args.scale,
+        pad_units=args.pad,
+        flip_x=True,
+    )
+    print(f"Wrote {args.out_svg_front}")
+
     rsvg = shutil.which("rsvg-convert")
     if rsvg is None:
         print("NOTE: rsvg-convert not found; skipping PNG generation.")
@@ -291,6 +324,12 @@ def main() -> int:
 
     subprocess.run([rsvg, str(args.out_svg), "-o", str(args.out_png)], check=True)
     print(f"Wrote {args.out_png}")
+
+    subprocess.run([rsvg, str(args.out_svg_back), "-o", str(args.out_png_back)], check=True)
+    print(f"Wrote {args.out_png_back}")
+
+    subprocess.run([rsvg, str(args.out_svg_front), "-o", str(args.out_png_front)], check=True)
+    print(f"Wrote {args.out_png_front}")
     return 0
 
 

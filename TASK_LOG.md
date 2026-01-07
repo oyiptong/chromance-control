@@ -733,6 +733,86 @@ Proof-of-life:
 - `pio test -e native`: PASSED (35 test cases)
 - `pio run -e runtime`: SUCCESS
 
+### 2026-01-07 — Chromance map: generate both front/back view images
+
+Status: 🟢 Done
+
+What was done:
+- Updated the chromance map renderer to output both unmirrored “back view” and x-mirrored “front view” images.
+- Regenerated the map outputs for quick reference during mapping/topology debugging.
+
+Files touched:
+- scripts/render_chromance_map.py
+- chromance_map_front.png
+- chromance_map_back.png
+- chromance_map_front.svg
+- chromance_map_back.svg
+- TASK_LOG.md
+
+Proof-of-life:
+- `python3 scripts/render_chromance_map.py --ledmap mapping/ledmap.json --out-svg chromance_map.svg --out-png chromance_map.png --out-svg-front chromance_map_front.svg --out-png-front chromance_map_front.png --out-svg-back chromance_map_back.svg --out-png-back chromance_map_back.png`
+
+### 2026-01-07 — Fix Mode 1 vertex “toward” direction (use physical local-in-segment)
+
+Status: 🟢 Done
+
+What was done:
+- Fixed `Index_Walk_Test` vertex diagnostic so “walk toward vertex” always uses the physical LED index within a segment (`global_to_local % 14`) rather than `global_to_seg_k` (which is in global-index iteration order and can invert direction for `b_to_a` segments).
+- Updated native unit test to validate endpoint selection using the corrected per-LED canonical `ab_k`.
+
+Files touched:
+- src/core/effects/pattern_index_walk.h
+- test/test_effect_patterns.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (48 test cases)
+
+### 2026-01-07 — Runtime: Mode 1 step-hold (`s`/`S`) to freeze advancement
+
+Status: 🟢 Done
+
+What was done:
+- Added Mode 1 (`Index_Walk_Test`) single-step hold controls:
+  - `s`: step forward once and hold (no time-based advancement until another `s`/`S`)
+  - `S`: step backward once and hold
+- Step-hold applies to both the index/topology scans and the vertex diagnostic fill progression.
+- Added native unit tests to ensure step-hold freezes output until the next step and does not auto-advance with time.
+- Updated vertex diagnostic “pause mode” so when a vertex is selected manually it continues looping the toward-vertex walk animation (only vertex selection is paused), and in vertex mode `s`/`S` cycles vertices without stopping the animation.
+
+Files touched:
+- src/core/effects/pattern_index_walk.h
+- src/main_runtime.cpp
+- test/test_effect_patterns.cpp
+- test/test_main.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (48 test cases)
+
+### 2026-01-07 — Runtime: Mode 1 vertex diagnostic (incident segments + fill toward vertex)
+
+Status: 🟢 Done
+
+What was done:
+- Extended Mode 1 (`Index_Walk_Test`) with a topology-driven vertex diagnostic scan (`VERTEX_TOWARD`) that highlights a single vertex at a time by lighting all incident segments and filling LEDs toward the vertex, enabling practical vertex discovery + segment direction debugging.
+- Added generator-emitted topology tables to the mapping header (`vertex_id` + per-segment endpoint vertex IDs) and exposed them via `MappingTables` so core effects can be topology-aware without Arduino/WiFi dependencies.
+- Updated runtime controls/logging: `n/N` step vertex when in vertex mode (otherwise `n` cycles scan modes), and serial output prints the active `V# (vx,vy)` plus incident `segIds`.
+- Added native unit tests covering vertex fill direction correctness and stepping behavior.
+
+Files touched:
+- scripts/generate_ledmap.py
+- src/core/mapping/mapping_tables.h
+- src/core/effects/pattern_index_walk.h
+- src/main_runtime.cpp
+- test/test_effect_patterns.cpp
+- test/test_main.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `python3 scripts/generate_ledmap.py --wiring mapping/wiring.json ...` → `leds=560 width=169 height=112 holes=18368`
+- `pio test -e native`: PASSED (45 test cases)
+
 ### 2026-01-07 — Mode 7 “Breathing” plan v2 clarifications
 
 Status: 🔵 Decision
@@ -879,6 +959,23 @@ Files touched:
 
 Proof-of-life:
 - `wc -l breath_pattern_improvement_implementation_plan.md` → `721`
+
+### 2026-01-07 — Mode 7 plan v2.7: tunables, config table, generator tests, memory caps
+
+Status: 🟢 Done
+
+What was done:
+- Refined the Mode 7 plan to v2.7 by documenting web-UI-ready tunable parameters (inhale dot speed/tail, exhale wave speed/target waves, pause beat bounds/timeout), and added a consolidated configuration table with defaults/ranges/units.
+- Added a “Generator tests (Python)” plan for topology table validity/stability.
+- Expanded the memory section with an approximate budget plus explicit hard caps (`MAX_DOTS`, `MAX_VERTEX_PATH_LENGTH`, `MAX_LED_PATH_LENGTH`) and deterministic overflow behavior.
+- Explicitly documented center selection complexity (O(V³) with V≈25 is acceptable).
+
+Files touched:
+- breath_pattern_improvement_implementation_plan.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `wc -l breath_pattern_improvement_implementation_plan.md` → `775`
 
 ### 2026-01-07 — Render chromance map SVG/PNG (segments + vertices)
 

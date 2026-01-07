@@ -101,6 +101,10 @@ void test_index_walk_effect_scan_mode_cycles_and_auto_resets() {
   TEST_ASSERT_EQUAL_STRING("RTL/DTU", e.scan_mode_name());
 
   e.cycle_scan_mode(0);
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(IndexWalkEffect::ScanMode::kVertexToward),
+                          static_cast<uint8_t>(e.scan_mode()));
+
+  e.cycle_scan_mode(0);
   TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(IndexWalkEffect::ScanMode::kIndex),
                           static_cast<uint8_t>(e.scan_mode()));
 
@@ -194,6 +198,212 @@ void test_index_walk_effect_topology_scan_orders_leds_within_segments_by_axis() 
   }
   assert_segment_sorted(/*seg_id=*/1, /*reverse=*/true);
   assert_segment_sorted(/*seg_id=*/2, /*reverse=*/true);
+}
+
+void test_index_walk_vertex_toward_lights_incident_segments_and_fills_toward_vertex() {
+  IndexWalkEffect e(1);
+  PixelsMap map;
+  std::vector<Rgb> out(map.led_count());
+  EffectFrame frame;
+  frame.params.brightness = 255;
+
+  e.reset(0);
+  // Cycle into VERTEX_TOWARD mode: INDEX -> LTR/UTD -> RTL/DTU -> VERTEX_TOWARD.
+  e.cycle_scan_mode(0);
+  e.cycle_scan_mode(0);
+  e.cycle_scan_mode(0);
+  TEST_ASSERT_TRUE(e.in_vertex_mode());
+
+  // p=0: nothing lit.
+  frame.now_ms = 0;
+  e.render(frame, map, out.data(), out.size());
+  size_t lit = 0;
+  for (const auto& c : out) lit += (c.r || c.g || c.b) ? 1 : 0;
+  TEST_ASSERT_EQUAL_UINT32(0, lit);
+
+  // p=1: for each incident segment, exactly one LED should light at the far end (toward the vertex).
+  frame.now_ms = 1;
+  e.render(frame, map, out.data(), out.size());
+
+  const uint8_t vid = e.active_vertex_id();
+  const uint8_t seg_count = e.active_vertex_seg_count();
+  const uint8_t* segs = e.active_vertex_segs();
+  TEST_ASSERT_TRUE(seg_count > 0);
+
+  auto seg_is_incident = [&](uint8_t seg) {
+    for (uint8_t j = 0; j < seg_count; ++j) {
+      if (segs[j] == seg) return true;
+    }
+    return false;
+  };
+
+  const uint8_t* global_seg = chromance::core::MappingTables::global_to_seg();
+  const uint16_t* global_local = chromance::core::MappingTables::global_to_local();
+  const uint8_t* global_dir = chromance::core::MappingTables::global_to_dir();
+  const uint8_t* sva = chromance::core::MappingTables::seg_vertex_a();
+  const uint8_t* svb = chromance::core::MappingTables::seg_vertex_b();
+
+  lit = 0;
+  for (size_t i = 0; i < out.size(); ++i) {
+    const bool is_lit = out[i].r || out[i].g || out[i].b;
+    if (!is_lit) continue;
+    ++lit;
+
+    const uint8_t seg = global_seg[i];
+    TEST_ASSERT_TRUE_MESSAGE(seg_is_incident(seg), "lit LED belongs to a non-incident segment");
+
+    const uint8_t local_in_seg = static_cast<uint8_t>(global_local[i] % 14U);
+    const uint8_t ab_k =
+        (global_dir[i] == 0) ? local_in_seg : static_cast<uint8_t>(13U - local_in_seg);
+    if (vid == sva[seg]) {
+      TEST_ASSERT_EQUAL_UINT8(13, ab_k);
+    } else if (vid == svb[seg]) {
+      TEST_ASSERT_EQUAL_UINT8(0, ab_k);
+    } else {
+      TEST_FAIL_MESSAGE("active vertex is neither endpoint A nor B for an incident segment");
+    }
+  }
+  TEST_ASSERT_EQUAL_UINT32(seg_count, static_cast<uint32_t>(lit));
+
+  // p=14: all LEDs of incident segments should be lit (14 per segment).
+  frame.now_ms = 14;  // p=14 without auto-advancing the vertex (cycle boundary is 15ms)
+  e.render(frame, map, out.data(), out.size());
+  lit = 0;
+  for (size_t i = 0; i < out.size(); ++i) {
+    const bool is_lit = out[i].r || out[i].g || out[i].b;
+    if (!is_lit) continue;
+    ++lit;
+    const uint8_t seg = global_seg[i];
+    TEST_ASSERT_TRUE(seg_is_incident(seg));
+  }
+  TEST_ASSERT_EQUAL_UINT32(static_cast<uint32_t>(seg_count) * 14U, static_cast<uint32_t>(lit));
+
+  // Manual stepping should change the active vertex deterministically.
+  const uint8_t v0 = e.active_vertex_id();
+  e.vertex_next(21);
+  const uint8_t v1 = e.active_vertex_id();
+  TEST_ASSERT_NOT_EQUAL_UINT8(v0, v1);
+  e.vertex_prev(22);
+  TEST_ASSERT_EQUAL_UINT8(v0, e.active_vertex_id());
+}
+
+void test_index_walk_effect_step_hold_freezes_until_next_step() {
+  IndexWalkEffect e(10);
+  PixelsMap map;
+  std::vector<Rgb> out(5);
+  EffectFrame frame;
+  frame.params.brightness = 255;
+
+  e.reset(0);
+
+  frame.now_ms = 0;
+  e.render(frame, map, out.data(), out.size());
+  TEST_ASSERT_EQUAL_UINT16(0, e.active_index());
+
+  // Press 's' to step once and hold.
+  e.step_hold_next(5);
+  frame.now_ms = 5;
+  e.render(frame, map, out.data(), out.size());
+  TEST_ASSERT_EQUAL_UINT16(1, e.active_index());
+
+  // Time passing does not advance while held.
+  frame.now_ms = 100;
+  e.render(frame, map, out.data(), out.size());
+  TEST_ASSERT_EQUAL_UINT16(1, e.active_index());
+
+  // Additional steps move one position per keypress.
+  e.step_hold_next(101);
+  frame.now_ms = 101;
+  e.render(frame, map, out.data(), out.size());
+  TEST_ASSERT_EQUAL_UINT16(2, e.active_index());
+
+  e.step_hold_prev(102);
+  frame.now_ms = 102;
+  e.render(frame, map, out.data(), out.size());
+  TEST_ASSERT_EQUAL_UINT16(1, e.active_index());
+
+  // Clearing hold returns to time-based progression.
+  e.clear_manual_hold(200);
+  frame.now_ms = 200;
+  e.render(frame, map, out.data(), out.size());
+  TEST_ASSERT_EQUAL_UINT16(0, e.active_index());
+
+  frame.now_ms = 210;
+  e.render(frame, map, out.data(), out.size());
+  TEST_ASSERT_EQUAL_UINT16(1, e.active_index());
+}
+
+void test_index_walk_vertex_mode_step_hold_freezes_fill_progress() {
+  IndexWalkEffect e(1);
+  PixelsMap map;
+  std::vector<Rgb> out(map.led_count());
+  EffectFrame frame;
+  frame.params.brightness = 255;
+
+  e.reset(0);
+  // Cycle into VERTEX_TOWARD mode: INDEX -> LTR/UTD -> RTL/DTU -> VERTEX_TOWARD.
+  e.cycle_scan_mode(0);
+  e.cycle_scan_mode(0);
+  e.cycle_scan_mode(0);
+  TEST_ASSERT_TRUE(e.in_vertex_mode());
+
+  // Step once and hold at p=1 (one LED per incident segment).
+  e.step_hold_next(0);
+  frame.now_ms = 0;
+  e.render(frame, map, out.data(), out.size());
+
+  const uint8_t seg_count = e.active_vertex_seg_count();
+  size_t lit0 = 0;
+  for (const auto& c : out) lit0 += (c.r || c.g || c.b) ? 1 : 0;
+  TEST_ASSERT_EQUAL_UINT32(seg_count, static_cast<uint32_t>(lit0));
+
+  // Later timestamps should not auto-advance the fill while held.
+  frame.now_ms = 100;
+  e.render(frame, map, out.data(), out.size());
+  size_t lit1 = 0;
+  for (const auto& c : out) lit1 += (c.r || c.g || c.b) ? 1 : 0;
+  TEST_ASSERT_EQUAL_UINT32(seg_count, static_cast<uint32_t>(lit1));
+}
+
+void test_index_walk_vertex_manual_selection_loops_fill_animation() {
+  IndexWalkEffect e(1);
+  PixelsMap map;
+  std::vector<Rgb> out(map.led_count());
+  EffectFrame frame;
+  frame.params.brightness = 255;
+
+  e.reset(0);
+  // Cycle into VERTEX_TOWARD mode: INDEX -> LTR/UTD -> RTL/DTU -> VERTEX_TOWARD.
+  e.cycle_scan_mode(0);
+  e.cycle_scan_mode(0);
+  e.cycle_scan_mode(0);
+  TEST_ASSERT_TRUE(e.in_vertex_mode());
+
+  // Manually select a vertex to disable auto vertex cycling.
+  e.vertex_next(0);
+
+  // Force initial build of adjacency + active vertex selection.
+  frame.now_ms = 0;
+  e.render(frame, map, out.data(), out.size());
+  const uint8_t seg_count = e.active_vertex_seg_count();
+  const uint8_t vid0 = e.active_vertex_id();
+  TEST_ASSERT_TRUE(seg_count > 0);
+
+  // p=1: one LED per incident segment.
+  frame.now_ms = 1;
+  e.render(frame, map, out.data(), out.size());
+  TEST_ASSERT_EQUAL_UINT8(vid0, e.active_vertex_id());
+  size_t lit = 0;
+  for (const auto& c : out) lit += (c.r || c.g || c.b) ? 1 : 0;
+  TEST_ASSERT_EQUAL_UINT32(seg_count, static_cast<uint32_t>(lit));
+
+  // p wraps every 15 steps: now_ms=16 => p=1 again.
+  frame.now_ms = 16;
+  e.render(frame, map, out.data(), out.size());
+  TEST_ASSERT_EQUAL_UINT8(vid0, e.active_vertex_id());
+  lit = 0;
+  for (const auto& c : out) lit += (c.r || c.g || c.b) ? 1 : 0;
+  TEST_ASSERT_EQUAL_UINT32(seg_count, static_cast<uint32_t>(lit));
 }
 
 void test_xy_scan_effect_uses_scan_order() {

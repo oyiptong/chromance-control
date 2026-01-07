@@ -1,10 +1,10 @@
-# Breathing Pattern (Mode 7) — Improvement Report + Implementation Plan (v2.5)
+# Breathing Pattern (Mode 7) — Improvement Report + Implementation Plan (v2.7)
 
 Goal: upgrade Mode 7 (“Breathing”) from a geometry-heuristic animation into a topology-driven, event-driven breath loop:
 - `num_dots` inhale dots travel inward toward the center via topology edges (segments), preferring monotone progress in `dist_to_center`, never traversing a segment twice (per-dot), with smooth motion (tail, brightness-only).
 - Path “distinctness” uses a **center-lane policy**: prefer unique final center-incident segments per inhale, with round-robin rotation when reuse is unavoidable.
 - Pauses are beat-count driven (3–7 beats), with crossfade progress tied to beat count (future: beat signal).
-- Exhale ends when **all outer edges** have received **7 wavefronts** (tracked per outer segment).
+- Exhale ends when **all outermost vertices** have received `target_waves` wavefronts (topology-correct, vertex-based completion).
 - Manual stepping remains consistent: `n` next stage, `N` previous stage, `ESC` back to auto.
 
 This document is a plan only: no firmware changes are made here.
@@ -114,9 +114,9 @@ Current code derives pulse phase and stop condition from time, which makes manua
 ## 3) Target Behavior (Spec)
 
 Mode 7 is an event-driven state machine with stages in this order:
-1) `INHALE`: 6 distinct dots traverse inward to center; stage ends when all reach center.
+1) `INHALE`: `num_dots` distinct dots traverse inward to center; stage ends when all reach center.
 2) `PAUSE_1`: heartbeat pulse for `beats_target` in [3..7], crossfade inhale→exhale across those beats.
-3) `EXHALE`: outward wavefronts; stage ends when every outer segment has received 7 wavefronts.
+3) `EXHALE`: outward wavefronts; stage ends when every outermost vertex has received `target_waves` wavefronts.
 4) `PAUSE_2`: heartbeat pulse for `beats_target` in [3..7], crossfade exhale→inhale across those beats.
 
 Manual control:
@@ -204,15 +204,14 @@ Extend `src/core/mapping/mapping_tables.h` to expose the generated topology arra
 
 Runtime BFS on the MCU is acceptable here due to the small graph size; precomputing distances in Python is an optimization only.
 
-### 4.2 Boundary vertices and “outer segments”
+### 4.2 Boundary vertices (optional utility; not used for EXHALE completion)
 Compute from the vertex graph:
 - Vertex degree map: `deg[v]`
-- Boundary vertex set (canonical for v2.4): `deg[v] == 2`
-- Outer segment set: segments incident to at least one boundary vertex.
+- Boundary vertex set (canonical definition): `deg[v] == 2`
 
 Notes:
-- Boundary detection is used only for EXHALE’s “outer segments” accounting. INHALE start selection uses §5.1.
-- Future improvement (preferred): have the generator emit explicit boundary flags per vertex/segment so firmware doesn’t need to infer.
+- v2.6 EXHALE completion does not depend on boundary heuristics; it uses `outermost_vertices` derived from `dist_to_center` (§7.1).
+- Boundary detection can still be useful for optional visuals/diagnostics in other patterns (e.g., “highlight boundary”), but it is not required for Mode 7 correctness.
 
 ### 4.3 Center definition
 Center is a configurable `vertex_id` (generator-emitted, stable; see §4.1.1), with deterministic resolution and fallback:
@@ -221,6 +220,9 @@ Center is a configurable `vertex_id` (generator-emitted, stable; see §4.1.1), w
   - compute BFS distances from each vertex to all others,
   - choose the vertex minimizing the maximum distance to all vertices (minimax eccentricity),
   - deterministic tie-break: smallest `vertex_id`.
+
+Complexity note (explicitly acceptable):
+- Minimax eccentricity selection is O(V³), but V≈25. This is not performance-sensitive on ESP32 and runs infrequently (only when center fallback is needed / init).
 
 Arrival semantics:
 - Dots target the chosen `center` vertex.
@@ -268,7 +270,9 @@ For a dot at vertex `v`:
   - `u` not previously visited (required; prevents cycles on plateaus)
 
 Plateau safety (recommended):
-- If choosing `dist[u] == dist[v]`, only allow if `u` has some neighbor `w` where `dist[w] < dist[u]` and the segment `segId(u,w)` is not used (so you don’t get trapped).
+- A plateau move (`dist[u] == dist[v]`) is allowed if:
+  - `u` is the assigned center-adjacent goal vertex for this dot, OR
+  - `u` has an unused neighbor `w` with `dist[w] < dist[u]`.
 
 Canonical selection rule (“downhill-preferred walk”):
 1) Enumerate candidate neighbors that pass the validity rules above.
@@ -276,7 +280,7 @@ Canonical selection rule (“downhill-preferred walk”):
 3) Only consider `dist[u] == dist[v]` moves if plateau-safe (as defined above).
 4) Apply center-lane constraints/preferences in §5.3 (applies only to the final approach into center).
 
-### 5.3 Distinctness policy (v2.5): center-lane preference + round-robin fallback
+### 5.3 Distinctness policy (v2.6): center-lane preference + round-robin fallback
 This section replaces boundary-local disjointness. The goal is to avoid consistently overloading the same “final approach” segment into the center while still allowing paths to merge elsewhere (no global edge-disjoint solver).
 
 Definitions:
@@ -299,6 +303,7 @@ At inhale start:
 1) Enumerate available lanes:
    - Build the neighbor list `center_neighbors[]` for the active subgraph.
    - Define `lane_count = center_degree = len(center_neighbors)`.
+   - Guardrail: if `lane_count == 0`, skip lane assignment and route dots directly to `center` (see §5.3.5).
 2) Maintain a persistent `center_lane_rr_offset` in the effect state:
    - Offset advances by 1 modulo `lane_count` whenever INHALE is (re)initialized in auto mode:
      - on automatic cycle transition into INHALE, or
@@ -346,6 +351,16 @@ Center-lane uniqueness and rotation apply **only to INHALE path generation**.
 
 INHALE-only lane iteration (`s/S`) is also an INHALE-only concern: it exists solely to re-run the INHALE path generation with a different `center_lane_rr_offset` without stepping phases.
 
+#### 5.3.5 Guardrail: `lane_count == 0` (center has no present incident segments)
+If the chosen `center` has no present incident segments in the active subgraph:
+- Define `lane_count = 0`.
+- Skip center-lane assignment entirely.
+- Attempt to route each dot directly to `center` without lane constraints (same per-dot segment-simple and downhill-preferred rules).
+- If routing to `center` is impossible (e.g., `center` is disconnected in the active subgraph):
+  - INHALE completes immediately as a no-op (all dots marked done) and the state machine advances to `PAUSE_1` on the next update.
+
+This is a safety guardrail to prevent deadlock in bench/partial builds; it is not an error condition.
+
 ### 5.4 LED path expansion
 Once we have an ordered list of segments with direction, for each segment step:
 - Append the 14 global indices for that segment in the correct direction.
@@ -367,43 +382,39 @@ This uses `global_to_seg` and `global_to_seg_k` plus the canonical A/B definitio
 
 For each dot:
 - Keep a fixed-point position along its LED path: `p16` (e.g., 16.16 fixed).
-- Advance `p16` by `speed * dt_ms` each frame.
+- Advance `p16` by `dot_speed_leds_per_ms * dt_ms` each frame.
 - Render:
   - head at `idx = floor(p)`
-  - tail behind it of length `L` (e.g., 4–6)
-  - perceptual brightness LUT (hand-tuned), e.g. `[255, 170, 110, 70, 45, ...]`
+  - tail behind it of length `tail_length_leds`
+  - perceptual brightness LUT (`tail_brightness_lut[]`, hand-tuned)
   - RGB is constant per dot; only brightness varies along the tail.
 
 This eliminates stutter without changing the physical path.
 
 ---
 
-## 7) Exhale: “7 wavefronts received by all outer segments”
+## 7) Exhale: vertex-based wavefront completion
 
-### 7.1 Discrete wavefront model
-Represent wavefronts as repeated outward sweeps over “distance layers” from center.
+### 7.1 Discrete wavefront model (vertex-based completion; topology-correct)
+Represent wavefronts as repeated outward sweeps over distance layers from `center`, where:
+- `dist_to_center[v]` is computed by BFS on the active subgraph.
+- `d_max = max(dist_to_center[v])` over all active vertices.
+- `outermost_vertices = { v | dist_to_center[v] == d_max }`.
 
-Precompute per segment:
-- Canonical distance: `seg_dist[segId] = min(dist[va], dist[vb])`
+Wavefront receipt tracking (completion only):
+- Maintain `received_vertex[v]` for `v ∈ outermost_vertices`, range `[0..target_waves]`.
+- Maintain `last_wave_id_seen_vertex[v]` to prevent double counting within a wave.
+- When a wave crosses layer `L`, for each vertex `v` where `dist_to_center[v] == L`:
+  - if `last_wave_id_seen_vertex[v] != wave_id`:
+    - increment `received_vertex[v]`,
+    - set `last_wave_id_seen_vertex[v] = wave_id`.
 
-Justification:
-- Using `min()` produces monotone, center-anchored wavefront layering and makes “received wavefronts” tracking stable even when segments span two distance layers.
+Termination (EXHALE completion condition):
+```text
+min(received_vertex[v] for v in outermost_vertices) >= target_waves
+```
 
-Maintain:
-- `uint8_t received[segId]` for outer segs (0..7)
-- `uint8_t last_wave_id_seen[segId]` to avoid double counting per wave sweep
-
-Define wave propagation:
-- `wave_id` increments each time a sweep restarts.
-- Advance the wave by **distance layers** to avoid frame-skip errors:
-  - Maintain `prev_layer` and `cur_layer` for the current wave (integer distance units).
-  - Each frame, compute `cur_layer` from accumulated progress (time-based or beat-based is fine for visuals).
-  - For every crossed layer `L` in `(prev_layer, cur_layer]`, process all segments whose `seg_dist == L` and mark them “received” for `wave_id`.
-  - This guarantees you cannot skip marking a segment even if `dt` is large or FPS drops.
-- Use `last_wave_id_seen[segId]` to prevent double counting within a wave.
-
-Termination:
-- EXHALE ends when `min(received[outer_segments]) >= 7`.
+Rendering can remain segment-based. For future tuning, wave advance rate is controlled by `wave_speed_layers_per_ms` (visual + completion timing). A later optional visual-only parameter is `exhale_band_width` (how narrow the emphasized band is), which must not change completion logic.
 
 ### 7.2 Rendering during exhale
 You can still render a smooth “wave field” visually, but the completion logic must be tied to the discrete wavefront tracker above.
@@ -426,7 +437,7 @@ To reduce the “plasma” look and make it feel like wavefronts:
 ## 8) Pause Phases: Beat-count driven, cyclical, crossfade tied to beats
 
 At pause start:
-- Choose `beats_target = random_int(3..7)`
+- Choose `beats_target = random_int(beats_target_min..beats_target_max)`
 - Set `beats_completed = 0`
 - Set `crossfade_phase = 0`
 - Record `last_beat_ms = now_ms` (real or virtual; used for fail-safe)
@@ -437,12 +448,17 @@ Beat events:
 
 PAUSE fail-safe timeout (guardrail):
 - Define `max_pause_duration_ms` (configuration).
-- During a pause, if `(now_ms - last_beat_ms) >= max_pause_duration_ms`, inject a **virtual beat** event:
-  - increment `beats_completed`,
-  - update `last_beat_ms = now_ms`,
-  - drive the same pulse envelope as a real beat.
+- During a pause, if `(now_ms - last_beat_ms) >= max_pause_duration_ms`, inject a **virtual beat** event.
 - This keeps beat-count completion primary while guaranteeing pauses cannot hang indefinitely if beat input is missing.
 - Apply identically to `PAUSE_1` and `PAUSE_2`.
+
+Atomic beat processing (no double increment):
+- At most one beat event may be processed per frame.
+- Real beat events take precedence over virtual (timeout) beats.
+- Beat processing is centralized so that in a single frame:
+  - `beats_completed` increments at most once,
+  - `last_beat_ms` updates at most once,
+  - the pulse envelope triggers at most once.
 
 Crossfade:
 - `fade = beats_completed / beats_target` (0..1), or a smoothstep variant.
@@ -496,6 +512,7 @@ Reinitialization scope for `s/S` (INHALE reinit):
 
 Determinism note:
 - `s/S` are a debugging/iteration tool; INHALE results must be deterministic given the same RNG seed and the same keypress sequence.
+- Pressing `s` or `S` in INHALE does not preserve previous start vertices; it re-runs the RNG-based start selection as part of INHALE reinitialization.
 
 ---
 
@@ -508,6 +525,7 @@ Determinism note:
   - Add topology-driven inhale path generation + smooth dot rendering.
   - Add exhale wavefront accounting + outer segment detection.
   - Refactor pauses to beat-count-driven progression and cyclical envelope.
+  - Expose Mode 7 tunable parameters via a config surface (e.g., a `Mode7Config` struct) intended to be adjustable via a web UI later (persistence deferred).
 
 ### Topology data availability (recommended)
 - `scripts/generate_ledmap.py`
@@ -521,6 +539,18 @@ Determinism note:
   - Add key handling for `s/S` alongside `n/N/ESC`.
   - Wire `s/S` to “reinitialize INHALE with offset update” (manual mode + INHALE only).
   - Possibly add optional debug printing (dot start vertices, beat targets, exhale counts) behind a flag.
+
+### Generator tests (Python)
+Add lightweight Python tests for generator-emitted topology tables:
+- Location: `test/scripts/test_generate_ledmap_topology.py` (or similar).
+- Run: via `python3 -m unittest` (or `pytest` if already used; keep minimal).
+
+Test cases:
+- Vertex stability: same `SEGMENTS` input ⇒ same vertex ordering and vertex IDs.
+- Endpoint validity: `seg_vertex_a/b` are valid vertex IDs in `[0..VERTEX_COUNT-1]`.
+- Completeness: every `SEGMENTS` endpoint appears in the emitted vertex list.
+- Coordinate consistency: emitted `vertex_vx/vertex_vy` match the canonical `SEGMENTS` endpoints.
+- Bench/partial safety: “present segment” filtering cannot produce invalid vertex IDs (no out-of-range).
 
 ### Tests (native)
 - `test/test_effect_patterns.cpp`
@@ -537,11 +567,22 @@ Determinism note:
     - phase progression triggered by completion
     - pause beat-count completion and crossfade progress
     - pause fail-safe: with no external beat events, virtual beats trigger and the pause still completes within bounded time
-    - exhale termination when wavefront counts reach 7 on all outer edges
+    - EXHALE vertex-based completion:
+      - outermost vertices receive exactly `target_waves` wavefronts before completion
     - INHALE-only lane stepping:
       - in manual mode + phase `INHALE`: `s` increments and `S` decrements `center_lane_rr_offset` with wrap-around
       - in other phases: `s/S` do not affect offset or phase
       - wrap-around: increment from `lane_count-1` -> `0`, decrement from `0` -> `lane_count-1`
+      - `lane_count == 1`: `s/S` wrap but lane assignment is unchanged (effective no-op)
+      - `s/S` ignored outside INHALE
+    - Plateau goal exception:
+      - when the center-adjacent goal lies on a plateau, routing can still reach it via the exception rule
+    - Beat fail-safe atomicity:
+      - when a real beat and a timeout would coincide in the same frame, `beats_completed` increments exactly once
+    - `s/S` determinism:
+      - same seed + same `s/S` sequence ⇒ identical per-dot paths and lane assignments
+    - `lane_count == 0` guardrail:
+      - INHALE does not deadlock; it deterministically completes (no-op) when center is disconnected
 
 Determinism requirements:
 - Use a deterministic RNG seed in tests.
@@ -557,20 +598,33 @@ Determinism requirements:
 
 The following defaults remove ambiguity and make the plan implementable without further decisions:
 
-- `num_dots`: default `6`.
-- `N_farthest`: default `min(VERTEX_COUNT, max(num_dots * 2, num_dots))`, must satisfy `N_farthest >= num_dots`.
-- `beats_target`: random integer in `[3..7]` chosen at pause start.
-- `max_pause_duration_ms`: required guardrail; default `6000` (two 30bpm heartbeat periods) unless overridden.
-- Boundary vertices for EXHALE outer-edge accounting: `deg[v] == 2` on the active subgraph.
-- Center selection:
-  - primary: `CENTER_VERTEX_ID` if configured and valid for the active subgraph,
-  - fallback: computed graph center by minimax eccentricity with tie-break `min vertex_id`.
-- Center-lane rotation:
-  - `center_lane_rr_offset` advances when INHALE is initialized in auto mode (auto transition into INHALE, or `ESC` reset).
-  - `center_lane_rr_offset` also advances in manual INHALE lane stepping:
-    - `s`: `offset = (offset + 1) % lane_count`
-    - `S`: `offset = (offset + lane_count - 1) % lane_count`
-  - `center_lane_rr_offset` does not advance on manual phase stepping (`n` / `N`).
+Parameters are intended to become adjustable via a future web UI. Persistence is explicitly deferred; for now these are compiled defaults and/or settable via a config surface.
+
+### 11.1 Configuration table (web UI-ready)
+
+| Parameter | Default | Range | Units | Purpose |
+|---|---:|---:|---|---|
+| `CENTER_VERTEX_ID` | unset | `[0..VERTEX_COUNT-1]` | vertex_id | Optional fixed center; if invalid/unset, fallback to graph center |
+| `num_dots` | 6 | `[1..MAX_DOTS]` | dots | Number of inhale dots / routes |
+| `N_farthest` | `min(VERTEX_COUNT, max(num_dots*2, num_dots))` | `[num_dots..VERTEX_COUNT]` | vertices | Size of farthest-from-center selection pool |
+| `dot_speed_leds_per_ms` | 0.08 | `[0.01..0.25]` | LEDs/ms | INHALE dot advance rate along LED path |
+| `tail_length_leds` | 5 | `[0..16]` | LEDs | Tail length behind dot head |
+| `tail_brightness_lut[]` | `[255,170,110,70,45,...]` | fixed small LUT | brightness | Perceptual tail brightness falloff; RGB constant |
+| `target_waves` | 7 | `[1..32]` | waves | EXHALE completion target wavefront count |
+| `wave_speed_layers_per_ms` | 0.004 | `[0.001..0.02]` | layers/ms | EXHALE wavefront layer advance rate |
+| `exhale_band_width` | 0.35 | `[0.05..1.0]` | layers (normalized) | Visual-only: band emphasis width (must not affect completion) |
+| `beats_target_min` | 3 | `[1..beats_target_max]` | beats | Minimum pause beats |
+| `beats_target_max` | 7 | `[beats_target_min..32]` | beats | Maximum pause beats |
+| `max_pause_duration_ms` | 6000 | `[500..60000]` | ms | PAUSE fail-safe timeout (virtual beat injection) |
+
+Center selection:
+- Primary: `CENTER_VERTEX_ID` if configured and valid for the active subgraph.
+- Fallback: computed graph center by minimax eccentricity with tie-break `min vertex_id`.
+
+Center-lane rotation:
+- `center_lane_rr_offset` advances when INHALE is initialized in auto mode (auto transition into INHALE, or `ESC` reset).
+- `center_lane_rr_offset` advances in manual INHALE lane stepping (`s`/`S`) with wrap-around.
+- `center_lane_rr_offset` does not advance on manual phase stepping (`n` / `N`).
 
 ---
 
@@ -680,3 +734,42 @@ Add deterministic tests for the vertex diagnostic logic (portable core):
 - adjacency building correctness (incident segments for a known vertex id)
 - `ab_k` computation invariants (for any LED on a segment, `ab_k` spans 0..13 exactly once)
 - fill-to-vertex rule lights monotone toward the endpoint (for both A and B endpoints)
+
+---
+
+## 14) Memory and allocation guardrails (MCU safety)
+
+Implementation must avoid dynamic allocation during INHALE generation and runtime updates:
+- All topology tables and caches are fixed-size, statically allocated, and bounded by known maxima (`VERTEX_COUNT`, `SEGMENT_COUNT`, `num_dots`, `LEDS_PER_SEGMENT`).
+- Do not use heap allocations (no `new`, no `std::vector`) in firmware paths.
+
+### 14.1 Memory budget (approximate) + hard caps
+
+Approximate footprint (order-of-magnitude; exact bytes not required):
+- Topology tables (flash, generated):
+  - vertices: `VERTEX_COUNT≈25` → `(vertex_vx, vertex_vy)` ~50 bytes (+ headers)
+  - segment endpoints: `SEGMENT_COUNT=40` → `seg_vertex_a/b` ~82 bytes (+ headers)
+- EXHALE completion (RAM):
+  - outermost vertex list + receipt counters: O(`VERTEX_COUNT`) small (< ~1 KB)
+- INHALE caches (RAM, bounded):
+  - per-dot vertex paths: O(`num_dots * MAX_VERTEX_PATH_LENGTH`)
+  - per-dot LED paths: O(`num_dots * MAX_LED_PATH_LENGTH`)
+  - optional per-segment LED caches: O(`SEGMENT_COUNT * LEDS_PER_SEGMENT`) per direction if stored (can be derived on the fly to save RAM)
+
+Hard caps (firmware constants; deterministic behavior on overflow):
+- `MAX_DOTS`: upper bound for `num_dots` (default recommended: 8 or 12; must be fixed).
+- `MAX_VERTEX_PATH_LENGTH`: maximum vertices per dot path (bounded; must be fixed).
+- `MAX_LED_PATH_LENGTH`: maximum LEDs per dot expanded path (bounded; must be fixed).
+
+Overflow behavior (must be deterministic and safe):
+- If a dot exceeds a cap during path generation or expansion:
+  - mark the dot as failed and treat it as “done” for completion purposes,
+  - log a concise warning (rate-limited),
+  - continue generating/rendering remaining dots.
+- INHALE completes when all non-failed dots are done (failed dots are treated as done).
+
+Largest expected allocations (callouts):
+- Per-segment LED index caches (`seg_leds_forward` / `seg_leds_reverse`) if used.
+- Per-dot vertex paths and per-dot expanded LED index paths (bounded by `SEGMENT_COUNT * LEDS_PER_SEGMENT` worst-case; plan must include a hard cap and truncation/abort behavior if exceeded).
+
+These guardrails exist to ensure predictable behavior on ESP32 and prevent fragmentation.

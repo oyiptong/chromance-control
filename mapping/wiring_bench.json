@@ -1,5 +1,5 @@
 {
-  "mappingVersion": "chromance-v1",
+  "mappingVersion": "chromance-v2",
   "isBenchSubset": true,
   "_comment": "VERIFIED: bench subset wiring confirmed on-device; this file is a strict subset and is used for bench builds.",
   "strips": [
@@ -9,13 +9,13 @@
         { "seg": 22, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime Index_Walk_Test, 2026-01-04)" },
         { "seg": 34, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime Index_Walk_Test, 2026-01-04)" },
         { "seg": 35, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime Index_Walk_Test, 2026-01-04)" },
-        { "seg": 31, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime Index_Walk_Test, 2026-01-04)" },
-        { "seg": 26, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime Index_Walk_Test, 2026-01-04)" },
-        { "seg": 17, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime Index_Walk_Test, 2026-01-04)" },
+        { "seg": 31, "dir": "b_to_a", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime Index_Walk_Test, 2026-01-04)" },
+        { "seg": 26, "dir": "b_to_a", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime Index_Walk_Test, 2026-01-04)" },
+        { "seg": 17, "dir": "b_to_a", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime Index_Walk_Test, 2026-01-04)" },
         { "seg": 21, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime Index_Walk_Test, 2026-01-04)" },
-        { "seg": 32, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime Index_Walk_Test, 2026-01-04)" },
+        { "seg": 32, "dir": "b_to_a", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime Index_Walk_Test, 2026-01-04)" },
         { "seg": 33, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime Index_Walk_Test, 2026-01-04)" },
-        { "seg": 37, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime Index_Walk_Test, 2026-01-04)" },
+        { "seg": 37, "dir": "b_to_a", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime Index_Walk_Test, 2026-01-04)" },
         { "seg": 38, "dir": "a_to_b", "_comment": "CONFIDENCE: VERIFIED - on-device physical validation (runtime Index_Walk_Test, 2026-01-04)" }
       ]
     }
