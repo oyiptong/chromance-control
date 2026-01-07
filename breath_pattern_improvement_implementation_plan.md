@@ -1,7 +1,7 @@
-# Breathing Pattern (Mode 7) — Improvement Report + Implementation Plan (v2.2)
+# Breathing Pattern (Mode 7) — Improvement Report + Implementation Plan (v2.4)
 
 Goal: upgrade Mode 7 (“Breathing”) from a geometry-heuristic animation into a topology-driven, event-driven breath loop:
-- 6 boundary-start dots (distinct boundary vertices) travel inward toward the center via topology edges (segments), preferring monotone progress in `dist_to_center`, never traversing a segment twice (per-dot), with smooth motion (tail, brightness-only).
+- `num_dots` inhale dots travel inward toward the center via topology edges (segments), preferring monotone progress in `dist_to_center`, never traversing a segment twice (per-dot), with smooth motion (tail, brightness-only).
 - Path “distinctness” uses a **center-lane policy**: prefer unique final center-incident segments per inhale, with round-robin rotation when reuse is unavoidable.
 - Pauses are beat-count driven (3–7 beats), with crossfade progress tied to beat count (future: beat signal).
 - Exhale ends when **all outer edges** have received **7 wavefronts** (tracked per outer segment).
@@ -118,7 +118,7 @@ Manual control:
 
 Visual constraints:
 - Dot tail uses **constant RGB** per dot; **brightness-only** falloff along tail.
-- Dots originate at 6 distinct topology boundary vertices (default: `degree == 2`) chosen randomly at inhale start.
+- `num_dots` distinct start vertices are chosen per inhale using the “farthest-from-center pool” method (§5.1).
 - Paths must be cycle-free and must not traverse any segment twice (per-dot).
 - Paths should be “downhill-preferred” in `dist_to_center`:
   - prefer strictly decreasing `dist_to_center` moves,
@@ -199,18 +199,20 @@ Runtime BFS on the MCU is acceptable here due to the small graph size; precomput
 ### 4.2 Boundary vertices and “outer segments”
 Compute from the vertex graph:
 - Vertex degree map: `deg[v]`
-- Boundary vertex set (default heuristic): `deg[v] == 2`
+- Boundary vertex set (canonical for v2.4): `deg[v] == 2`
 - Outer segment set: segments incident to at least one boundary vertex.
 
 Notes:
-- `deg==2` is a pragmatic heuristic for v2 and may be imperfect on some topologies.
+- Boundary detection is used only for EXHALE’s “outer segments” accounting. INHALE start selection uses §5.1.
 - Future improvement (preferred): have the generator emit explicit boundary flags per vertex/segment so firmware doesn’t need to infer.
 
 ### 4.3 Center definition
-Recommended: “graph center” vertex.
-- Compute BFS distances from each vertex to all others (graph is tiny: ~25 vertices).
-- Choose the vertex minimizing the maximum distance to all vertices.
-- Deterministic tie-break: among ties, pick the vertex with the smallest `(vx, vy)` lexicographically (or a fixed stable vertex index if you index vertices deterministically).
+Center is a configurable `vertex_id` (generator-emitted, stable; see §4.1.1), with deterministic resolution and fallback:
+- If `CENTER_VERTEX_ID` is configured and valid for the active subgraph, use it.
+- Otherwise compute “graph center” on the active subgraph:
+  - compute BFS distances from each vertex to all others,
+  - choose the vertex minimizing the maximum distance to all vertices (minimax eccentricity),
+  - deterministic tie-break: smallest `vertex_id`.
 
 Arrival semantics:
 - Dots target the chosen `center` vertex.
@@ -227,16 +229,28 @@ This is the monotonic constraint reference.
 
 ---
 
-## 5) Inhale: 6 Unique Monotone Paths (No segment reused)
+## 5) Inhale: Topology-Routed Monotone Paths (Segment-simple)
 
 ### 5.1 Path generation overview
 At inhale start:
-1) Choose 6 distinct boundary start vertices randomly.
-2) Assign each dot a preferred “center lane” (a chosen center-incident segment) using the center-lane policy (§5.3).
-3) For each start, generate a vertex path to the chosen center-adjacent vertex `u` subject to constraints:
+1) Determine `num_dots`:
+   - `num_dots` is a configurable parameter.
+   - If not explicitly provided, default `num_dots = 6`.
+2) Select `num_dots` distinct start vertices using the farthest-from-center pool method:
+   1. Compute `dist_to_center[v]` by BFS from `center` on the active subgraph.
+   2. Create a list of vertices sorted by:
+      - descending `dist_to_center` (furthest first),
+      - then ascending `deg[v]` (prefer lower degree),
+      - then ascending `vertex_id` (stable tie-break).
+   3. Define `N_farthest` (configurable; must satisfy `N_farthest >= num_dots`). Default:
+      - `N_farthest = min(VERTEX_COUNT, max(num_dots * 2, num_dots))`
+   4. Take `pool = first N_farthest vertices` from the sorted list (excluding any vertex not in the active subgraph).
+   5. Choose `num_dots` distinct starts from `pool` using deterministic RNG sampling without replacement.
+3) Assign each dot a preferred “center lane” (a chosen center-incident segment) using the center-lane policy (§5.3).
+4) For each start, generate a vertex path to the chosen center-adjacent vertex `u` subject to constraints:
    - downhill-preferred in `dist_to_center` (strictly decreasing preferred; plateau-safe equals allowed)
    - no segment traversed twice (per-dot; always enforced)
-4) Append the final segment `u → center` to the path (center lane), then convert the full path into an LED index path by expanding each segment step to its 14 LEDs.
+5) Append the final segment `u → center` to the path (center lane), then convert the full path into an LED index path by expanding each segment step to its 14 LEDs.
 
 ### 5.2 Constraints and selection rules
 For a dot at vertex `v`:
@@ -254,7 +268,7 @@ Canonical selection rule (“downhill-preferred walk”):
 3) Only consider `dist[u] == dist[v]` moves if plateau-safe (as defined above).
 4) Apply center-lane constraints/preferences in §5.3 (applies only to the final approach into center).
 
-### 5.3 Distinctness policy (v2.2): center-lane preference + round-robin fallback
+### 5.3 Distinctness policy (v2.4): center-lane preference + round-robin fallback
 This section replaces boundary-local disjointness. The goal is to avoid consistently overloading the same “final approach” segment into the center while still allowing paths to merge elsewhere (no global edge-disjoint solver).
 
 Definitions:
@@ -263,6 +277,10 @@ Definitions:
   - In vertex terms: neighbors `u` of `center` where an active edge `(u, center)` exists.
   - In segment terms: `segId(u, center)` for each neighbor `u`.
 - “center lane”: choosing a particular neighbor `u` (equivalently the segment `(u, center)`) as a dot’s final approach into `center`.
+
+Final-segment semantics (explicit):
+- Every INHALE path terminates at the `center` vertex.
+- A dot’s final segment is exactly **one** of `center_segments` (the assigned center lane), and center-lane constraints apply only to this final segment.
 
 Policy (applies only to INHALE, only to the final approach into center):
 - **Primary goal:** within a single inhale, each center-incident segment is used by at most one dot **when possible**.
@@ -274,7 +292,10 @@ At inhale start:
    - Build the neighbor list `center_neighbors[]` for the active subgraph.
    - Define `lane_count = center_degree = len(center_neighbors)`.
 2) Maintain a persistent `center_lane_rr_offset` in the effect state:
-   - Offset advances by 1 modulo `lane_count` once per inhale start (or per auto-cycle reset).
+   - Offset advances by 1 modulo `lane_count` whenever INHALE is (re)initialized in auto mode:
+     - on automatic cycle transition into INHALE, or
+     - on `ESC` reset to auto mode.
+   - Offset does not advance on manual phase stepping (`n` / `N`).
    - Offset is included in determinism: same seed + same offset => same lane assignments.
 3) Assign each dot a preferred lane index:
    - If `lane_count >= num_dots`: assign unique lanes by taking the first `num_dots` lanes starting at `center_lane_rr_offset` (wrapping around).
@@ -286,7 +307,7 @@ This achieves:
 
 #### 5.3.2 Route-to-lane path generation (then append lane)
 Instead of “route to center” directly:
-- For each dot, route from its boundary start `s` to its assigned center-adjacent vertex `u` (the neighbor associated with its lane).
+- For each dot, route from its start vertex `s` to its assigned center-adjacent vertex `u` (the neighbor associated with its lane).
 - Then append the final segment `u → center`.
 
 Constraints remain unchanged:
@@ -298,9 +319,10 @@ Note: to avoid dead-end routing, it’s acceptable to treat `u` as the “goal�
 
 #### 5.3.3 Fallback behavior if a lane is unreachable
 If a dot cannot reach its assigned `u` under constraints:
-1) Try alternate lanes in round-robin order starting from the dot’s assigned lane:
-   - attempt `lane = (assigned_lane + 1) % lane_count`, then `+2`, etc.
-2) If all lanes fail:
+1) Attempt each center lane at most once for this dot during this inhale:
+   - try the assigned lane first,
+   - then try remaining lanes in round-robin order starting from the assigned lane.
+2) If all lanes fail (all lanes attempted once and none reachable):
    - relax **only** the center-lane uniqueness constraint for that dot (i.e., allow selecting a lane already used by another dot in this inhale if it becomes reachable),
    - but never relax per-dot segment reuse (segment-simple must remain invariant).
 
@@ -336,8 +358,8 @@ For each dot:
 - Render:
   - head at `idx = floor(p)`
   - tail behind it of length `L` (e.g., 4–6)
-  - perceptual/exponential brightness falloff (LUT or hand-tuned values), e.g. `[255, 170, 110, 70, 45, ...]`
-  - **same RGB** for head+tail; only brightness changes.
+  - perceptual brightness LUT (hand-tuned), e.g. `[255, 170, 110, 70, 45, ...]`
+  - RGB is constant per dot; only brightness varies along the tail.
 
 This eliminates stutter without changing the physical path.
 
@@ -349,7 +371,10 @@ This eliminates stutter without changing the physical path.
 Represent wavefronts as repeated outward sweeps over “distance layers” from center.
 
 Precompute per segment:
-- `seg_dist[segId] = min(dist[va], dist[vb])` (or `avg`, choose once and keep consistent)
+- Canonical distance: `seg_dist[segId] = min(dist[va], dist[vb])`
+
+Justification:
+- Using `min()` produces monotone, center-anchored wavefront layering and makes “received wavefronts” tracking stable even when segments span two distance layers.
 
 Maintain:
 - `uint8_t received[segId]` for outer segs (0..7)
@@ -391,10 +416,20 @@ At pause start:
 - Choose `beats_target = random_int(3..7)`
 - Set `beats_completed = 0`
 - Set `crossfade_phase = 0`
+- Record `last_beat_ms = now_ms` (real or virtual; used for fail-safe)
 
 Beat events:
 - “Now” implementation: synthesize beats at some nominal bpm using `now_ms`, but structure code around a `beat_event` boolean.
 - “Later” implementation: use `Signals` (e.g., `signals.audio_beat` or add a dedicated beat signal) and increment on rising edges.
+
+PAUSE fail-safe timeout (guardrail):
+- Define `max_pause_duration_ms` (configuration).
+- During a pause, if `(now_ms - last_beat_ms) >= max_pause_duration_ms`, inject a **virtual beat** event:
+  - increment `beats_completed`,
+  - update `last_beat_ms = now_ms`,
+  - drive the same pulse envelope as a real beat.
+- This keeps beat-count completion primary while guaranteeing pauses cannot hang indefinitely if beat input is missing.
+- Apply identically to `PAUSE_1` and `PAUSE_2`.
 
 Crossfade:
 - `fade = beats_completed / beats_target` (0..1), or a smoothstep variant.
@@ -419,7 +454,7 @@ Keep:
 - `phase_`
 - `phase_start_ms_` (for per-phase local time only, not for completion)
 - `manual_enabled_` and manual phase selection (already exists; adapt to new phases)
-- `center_lane_rr_offset_` (persistent across inhales; advances once per inhale start to rotate center-lane reuse)
+- `center_lane_rr_offset_` (persistent across inhales; advances only when INHALE is initialized in auto mode to rotate center-lane reuse)
 
 Phase completion conditions:
 - INHALE: `all_dots_done == true`
@@ -432,6 +467,7 @@ When manual mode is enabled:
 - phase progression does not happen automatically.
 - animations continue looping within the selected phase.
 - `ESC` disables manual and resets to auto phase = INHALE with new random starts.
+- `center_lane_rr_offset_` advances only when INHALE is (re)initialized in auto mode (auto cycle transition into INHALE, or `ESC` reset). It does not advance on manual phase stepping.
 
 ---
 
@@ -460,29 +496,45 @@ When manual mode is enabled:
 ### Tests (native)
 - `test/test_effect_patterns.cpp`
   - Add deterministic tests for:
+    - inhale start selection:
+      - chosen starts are distinct,
+      - chosen starts are drawn from the farthest pool,
+      - ordering is deterministic given a fixed RNG seed
     - inhale path monotonicity (`dist` non-increasing)
     - no segment reuse
-    - 6 distinct boundary starts
     - center-lane uniqueness when `deg(center) >= num_dots`
     - center-lane reuse rotates across inhales when `deg(center) < num_dots` (round-robin offset)
     - fallback behavior when a dot cannot reach its assigned lane (tries alternates; never violates per-dot segment-simple)
     - phase progression triggered by completion
     - pause beat-count completion and crossfade progress
+    - pause fail-safe: with no external beat events, virtual beats trigger and the pause still completes within bounded time
     - exhale termination when wavefront counts reach 7 on all outer edges
 
 Determinism requirements:
 - Use a deterministic RNG seed in tests.
-- Ensure inhale lane assignment + routing is deterministic given: same seed, same center, same topology inputs, and the same `center_lane_rr_offset`.
+- Ensure INHALE behavior (start selection, lane assignment, routing, fallback) is deterministic given:
+  - the same RNG seed,
+  - the same topology,
+  - the same center selection,
+  - the same `center_lane_rr_offset`.
 
 ---
 
-## 11) Open Questions (Need confirmation)
+## 11) Configuration (Final Defaults + Guardrails)
 
-1) Boundary heuristic:
-   - confirm `degree==2` is acceptable as the default boundary definition for now, or specify a different boundary set.
+The following defaults remove ambiguity and make the plan implementable without further decisions:
 
-2) Center selection (configurable center vertex):
-   - confirm whether center should be configured as a `(vx,vy)` coordinate (human-friendly) or as a generated `vertex_id` (compact/stable).
+- `num_dots`: default `6`.
+- `N_farthest`: default `min(VERTEX_COUNT, max(num_dots * 2, num_dots))`, must satisfy `N_farthest >= num_dots`.
+- `beats_target`: random integer in `[3..7]` chosen at pause start.
+- `max_pause_duration_ms`: required guardrail; default `6000` (two 30bpm heartbeat periods) unless overridden.
+- Boundary vertices for EXHALE outer-edge accounting: `deg[v] == 2` on the active subgraph.
+- Center selection:
+  - primary: `CENTER_VERTEX_ID` if configured and valid for the active subgraph,
+  - fallback: computed graph center by minimax eccentricity with tie-break `min vertex_id`.
+- Center-lane rotation:
+  - `center_lane_rr_offset` advances only when INHALE is initialized in auto mode (auto transition into INHALE, or `ESC` reset).
+  - `center_lane_rr_offset` does not advance on manual phase stepping (`n` / `N`).
 
 ---
 

@@ -816,6 +816,22 @@ Files touched:
 Proof-of-life:
 - `wc -l breath_pattern_improvement_implementation_plan.md` → `594`
 
+### 2026-01-07 — Mode 7 plan v2.4: safety guardrails + unambiguous config
+
+Status: 🟢 Done
+
+What was done:
+- Refined the Mode 7 plan to v2.4 with final guardrails and removed remaining ambiguity: generalized INHALE start selection to an arbitrary `num_dots` using a deterministic farthest-from-center pool, made final center-lane segment semantics explicit, and locked down center-lane round-robin offset advancement rules.
+- Added PAUSE fail-safe (`max_pause_duration_ms`) that injects deterministic virtual beats if no beat events arrive, ensuring pauses cannot hang indefinitely.
+- Locked EXHALE segment distance to `seg_dist = min(dist[va], dist[vb])` and normalized tail language to “perceptual brightness LUT”.
+
+Files touched:
+- breath_pattern_improvement_implementation_plan.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `wc -l breath_pattern_improvement_implementation_plan.md` → `646`
+
 ### 2026-01-05 — Runtime: “Seven_Comets” per-comet sequences (unique lengths + independent rerolls)
 
 Status: 🟢 Done
