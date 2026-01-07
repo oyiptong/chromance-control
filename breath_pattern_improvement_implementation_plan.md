@@ -1,7 +1,8 @@
-# Breathing Pattern (Mode 7) — Improvement Report + Implementation Plan
+# Breathing Pattern (Mode 7) — Improvement Report + Implementation Plan (v2)
 
 Goal: upgrade Mode 7 (“Breathing”) from a geometry-heuristic animation into a topology-driven, event-driven breath loop:
-- 6 distinct boundary-start dots travel inward to the center via topology edges (segments), never increasing `dist_to_center`, never traversing a segment twice, with smooth motion (tail, brightness-only).
+- 6 boundary-start dots (distinct boundary vertices) travel inward toward the center via topology edges (segments), preferring monotone progress in `dist_to_center`, never traversing a segment twice (per-dot), with smooth motion (tail, brightness-only).
+- Path “distinctness” is **local-to-boundary by default**: enforce global segment disjointness only for the first **K** steps from the boundary (K configurable, default 2; allowed 1–3). Paths may merge organically near the center.
 - Pauses are beat-count driven (3–7 beats), with crossfade progress tied to beat count (future: beat signal).
 - Exhale ends when **all outer edges** have received **7 wavefronts** (tracked per outer segment).
 - Manual stepping remains consistent: `n` next stage, `N` previous stage, `ESC` back to auto.
@@ -117,8 +118,12 @@ Manual control:
 
 Visual constraints:
 - Dot tail uses **constant RGB** per dot; **brightness-only** falloff along tail.
-- Dots originate at 6 distinct topology boundary vertices (degree-2) chosen randomly at inhale start.
-- Paths must be non-increasing in `dist_to_center` and must not traverse any segment twice.
+- Dots originate at 6 distinct topology boundary vertices (default: `degree == 2`) chosen randomly at inhale start.
+- Paths must be cycle-free and must not traverse any segment twice (per-dot).
+- Paths should be “downhill-preferred” in `dist_to_center`:
+  - prefer strictly decreasing `dist_to_center` moves,
+  - allow equal-distance moves only when plateau-safe (see §5.2).
+- Dots may converge near the center and may share final segments unless explicitly configured otherwise.
 
 ---
 
@@ -131,7 +136,7 @@ To follow “connecting segments”, firmware needs the segment endpoints in ver
 Today this segment list exists in Python (`scripts/generate_ledmap.py::SEGMENTS`) and in docs (`docs/architecture/wled_integration_implementation_plan.md` / `mapping/README_wiring.md`), but **not as a reusable C++ structure**.
 
 #### Recommended approach (generator-driven)
-Extend the mapping header generator (`scripts/generate_ledmap.py --out-header`) to additionally emit:
+Extend the mapping header generator (`scripts/generate_ledmap.py --out-header`) to emit, at minimum:
 - `constexpr uint8_t SEGMENT_COUNT = 40;`
 - `constexpr int8_t seg_va_x[SEGMENT_COUNT+1]`, `seg_va_y[...]`
 - `constexpr int8_t seg_vb_x[...]`, `seg_vb_y[...]`
@@ -139,6 +144,12 @@ Extend the mapping header generator (`scripts/generate_ledmap.py --out-header`) 
 Rationale:
 - Avoid duplicating the SEGMENTS list in C++ by hand.
 - Ensure breathing mode always matches the generator’s canonical topology.
+
+Optional / nice-to-have generator output (not required for v2):
+- per-vertex adjacency lists
+- precomputed BFS distances (e.g., `dist_to_center` for the chosen center)
+
+Runtime BFS on the MCU is acceptable here due to the small graph size; precomputing distances in Python is an optimization only.
 
 Then add C++ accessors (portable) in core, e.g.:
 - `core/mapping/mapping_tables.h` gains accessors for these arrays when present.
@@ -150,13 +161,23 @@ Fallback (if we don’t want to touch generator yet):
 ### 4.2 Boundary vertices and “outer segments”
 Compute from the vertex graph:
 - Vertex degree map: `deg[v]`
-- Boundary vertex set: `deg[v] == 2`
+- Boundary vertex set (default heuristic): `deg[v] == 2`
 - Outer segment set: segments incident to at least one boundary vertex.
+
+Notes:
+- `deg==2` is a pragmatic heuristic for v2 and may be imperfect on some topologies.
+- Future improvement (preferred): have the generator emit explicit boundary flags per vertex/segment so firmware doesn’t need to infer.
 
 ### 4.3 Center definition
 Recommended: “graph center” vertex.
 - Compute BFS distances from each vertex to all others (graph is tiny: ~25 vertices).
 - Choose the vertex minimizing the maximum distance to all vertices.
+- Deterministic tie-break: among ties, pick the vertex with the smallest `(vx, vy)` lexicographically (or a fixed stable vertex index if you index vertices deterministically).
+
+Arrival semantics:
+- Default: dots target the chosen `center` vertex.
+- Optional mode (if desired): allow “center-adjacent arrival”, where a dot can terminate at any vertex with `dist_to_center == 1` (useful if the true visual “center” is a small cluster).
+- Do not require unique final segments unless explicitly enabled; shared final segments/vertices are allowed.
 
 Alternative: geometric center of `(vx,vy)`, but graph-center is better for monotone `dist_to_center`.
 
@@ -174,9 +195,9 @@ This is the monotonic constraint reference.
 At inhale start:
 1) Choose 6 distinct boundary start vertices randomly.
 2) For each start, generate a vertex path to center subject to constraints:
-   - non-increasing `dist`
-   - no segment traversed twice (within that dot; optionally also global across all 6)
-   - path uniqueness across the 6 routes
+   - downhill-preferred in `dist_to_center` (strictly decreasing preferred; plateau-safe equals allowed)
+   - no segment traversed twice (per-dot; always enforced)
+   - global disjointness enforced only near the boundary for the first K steps (default K=2; configurable 1–3)
 3) Convert each vertex path into an LED index path by expanding each segment step to its 14 LEDs.
 
 ### 5.2 Constraints and selection rules
@@ -184,20 +205,32 @@ For a dot at vertex `v`:
 - Valid neighbor `u` must satisfy:
   - `dist[u] <= dist[v]`  (no backtracking)
   - segment `segId(v,u)` not already used in this dot’s path
-  - `u` not previously visited (recommended; prevents cycles on plateaus)
+  - `u` not previously visited (required; prevents cycles on plateaus)
 
 Plateau safety (recommended):
 - If choosing `dist[u] == dist[v]`, only allow if `u` has some neighbor `w` where `dist[w] < dist[u]` and the segment `segId(u,w)` is not used (so you don’t get trapped).
 
-### 5.3 Uniqueness across the 6 paths
-Strongest interpretation (if desired): no segment can be used by more than one dot (global edge-disjointness).
-- Maintain `used_segments_global` while generating paths.
-- Add constraint: `segId(v,u)` not in `used_segments_global`.
-- If generation fails, reroll starts or relax (e.g., disjoint for first K segments only).
+Canonical selection rule (“downhill-preferred walk”):
+1) Enumerate candidate neighbors that pass the validity rules above.
+2) Prefer candidates with `dist[u] < dist[v]`.
+3) Only consider `dist[u] == dist[v]` moves if plateau-safe (as defined above).
+4) Apply additional constraints/preferences in §5.3 (boundary-local disjointness).
 
-If global disjointness is too strict, adopt:
-- disjoint for first K steps (K=2–3), and
-- unique signature per dot: `segId` sequence differs from all previous dot sequences.
+### 5.3 Uniqueness across the 6 paths
+Default requirement (v2): **reject full global edge-disjointness**. Do not require all six inhale paths to be globally segment-unique end-to-end.
+
+Required uniqueness (always enforced):
+- **Per-dot**: a dot may not traverse the same segment twice.
+- **Boundary-local global**: enforce global segment uniqueness only for the first **K** steps from the boundary (K configurable, default 2; allowed 1–3).
+
+Why boundary-local disjointness only:
+- True global edge-disjointness can be impossible in graphs with bottlenecks/cuts (and can cause frequent “reroll until it works” behavior).
+- Visually, merging near the center is acceptable and often looks more organic.
+
+Implementation approach:
+- Maintain `used_segments_global_prefix` that is consulted only while the dot is within its first K steps from the boundary.
+- Generation can be sequential: generate path0..path5, updating `used_segments_global_prefix` as you commit each path’s first K segments.
+- Outside the prefix window, you may still **prefer** unused segments to reduce overlap, but it is not required.
 
 ### 5.4 LED path expansion
 Once we have an ordered list of segments with direction, for each segment step:
@@ -224,7 +257,7 @@ For each dot:
 - Render:
   - head at `idx = floor(p)`
   - tail behind it of length `L` (e.g., 4–6)
-  - brightness weights e.g. `[255, 140, 70, 35, ...]` or an exponential curve
+  - perceptual/exponential brightness falloff (LUT or hand-tuned values), e.g. `[255, 170, 110, 70, 45, ...]`
   - **same RGB** for head+tail; only brightness changes.
 
 This eliminates stutter without changing the physical path.
@@ -245,8 +278,12 @@ Maintain:
 
 Define wave propagation:
 - `wave_id` increments each time a sweep restarts.
-- `radius` increases from 0 to `max_dist` over time (or in discrete steps).
-- When `radius` crosses `seg_dist` during wave `wave_id`, mark that segment as having received one wavefront (increment `received[segId]`) if `last_wave_id_seen != wave_id`.
+- Advance the wave by **distance layers** to avoid frame-skip errors:
+  - Maintain `prev_layer` and `cur_layer` for the current wave (integer distance units).
+  - Each frame, compute `cur_layer` from accumulated progress (time-based or beat-based is fine for visuals).
+  - For every crossed layer `L` in `(prev_layer, cur_layer]`, process all segments whose `seg_dist == L` and mark them “received” for `wave_id`.
+  - This guarantees you cannot skip marking a segment even if `dt` is large or FPS drops.
+- Use `last_wave_id_seen[segId]` to prevent double counting within a wave.
 
 Termination:
 - EXHALE ends when `min(received[outer_segments]) >= 7`.
@@ -346,28 +383,24 @@ When manual mode is enabled:
     - inhale path monotonicity (`dist` non-increasing)
     - no segment reuse
     - 6 distinct boundary starts
+    - boundary-local disjointness (first K segments are globally unique)
     - phase progression triggered by completion
     - pause beat-count completion and crossfade progress
     - exhale termination when wavefront counts reach 7 on all outer edges
 
-Note: deterministic tests require deterministic RNG seeds; the effect should accept a seed for tests or derive seed from reset time in a controllable way.
+Determinism requirements:
+- Use a deterministic RNG seed in tests.
+- Ensure path generation is deterministic given the same seed and the same topology inputs (including deterministic center tie-breaks).
 
 ---
 
 ## 11) Open Questions (Need confirmation)
 
-1) “No segment can be traversed twice”: is this constraint:
-   - per-dot only, or
-   - global across all 6 dots?
+1) Boundary heuristic:
+   - confirm `degree==2` is acceptable as the default boundary definition for now, or specify a different boundary set.
 
-2) Center definition:
-   - graph center vertex (recommended), or
-   - a specific vertex you consider “the center” physically?
-
-3) Boundary vertex definition:
-   - degree==2 only, or include degree==3 on the perimeter?
-
-4) Do you want dots to arrive exactly at the center vertex, or “near center” (one of several center-adjacent segments)?
+2) Center-adjacent arrival:
+   - confirm whether to keep the default “arrive at center vertex”, or enable “arrive at dist==1 ring” for visual reasons.
 
 ---
 
