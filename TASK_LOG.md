@@ -832,6 +832,21 @@ Files touched:
 Proof-of-life:
 - `wc -l breath_pattern_improvement_implementation_plan.md` → `646`
 
+### 2026-01-07 — Mode 7 plan v2.5: INHALE-only center-lane stepping (`s`/`S`)
+
+Status: 🟢 Done
+
+What was done:
+- Refined the Mode 7 plan to v2.5 by adding an INHALE-only manual lane-iteration control (`s`/`S`) that adjusts `center_lane_rr_offset` with wrap-around and reinitializes INHALE (start selection + lane assignment + routing regenerated) without using `n/N` (phase stepping).
+- Clarified offset advancement semantics to include `s/S` in INHALE manual mode while keeping `n/N` reserved for phase navigation; updated the files-to-change checklist and test plan accordingly.
+
+Files touched:
+- breath_pattern_improvement_implementation_plan.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `wc -l breath_pattern_improvement_implementation_plan.md` → `679`
+
 ### 2026-01-05 — Runtime: “Seven_Comets” per-comet sequences (unique lengths + independent rerolls)
 
 Status: 🟢 Done

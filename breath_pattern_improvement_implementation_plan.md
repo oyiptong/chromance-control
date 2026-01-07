@@ -1,4 +1,4 @@
-# Breathing Pattern (Mode 7) — Improvement Report + Implementation Plan (v2.4)
+# Breathing Pattern (Mode 7) — Improvement Report + Implementation Plan (v2.5)
 
 Goal: upgrade Mode 7 (“Breathing”) from a geometry-heuristic animation into a topology-driven, event-driven breath loop:
 - `num_dots` inhale dots travel inward toward the center via topology edges (segments), preferring monotone progress in `dist_to_center`, never traversing a segment twice (per-dot), with smooth motion (tail, brightness-only).
@@ -61,7 +61,15 @@ Mode 7 currently renders:
 - `N` previous stage (manual)
 - `ESC` reset to auto
 
-These controls are now consistent across modes 2/6/7, so Mode 7 can reuse the same semantics.
+v2.5 refinement: add an INHALE-only “lane step” control (manual only):
+- `s`: advance `center_lane_rr_offset` by +1 (wrap modulo `lane_count`) and reinitialize INHALE.
+- `S`: reverse `center_lane_rr_offset` by -1 (wrap modulo `lane_count`) and reinitialize INHALE.
+
+Constraints:
+- `s/S` are active only when manual mode is enabled and phase is `INHALE`.
+- In any other phase, `s/S` are ignored (no-op).
+
+These controls keep `n/N` reserved for phase stepping while allowing rapid iteration over center lanes within INHALE.
 
 ---
 
@@ -268,7 +276,7 @@ Canonical selection rule (“downhill-preferred walk”):
 3) Only consider `dist[u] == dist[v]` moves if plateau-safe (as defined above).
 4) Apply center-lane constraints/preferences in §5.3 (applies only to the final approach into center).
 
-### 5.3 Distinctness policy (v2.4): center-lane preference + round-robin fallback
+### 5.3 Distinctness policy (v2.5): center-lane preference + round-robin fallback
 This section replaces boundary-local disjointness. The goal is to avoid consistently overloading the same “final approach” segment into the center while still allowing paths to merge elsewhere (no global edge-disjoint solver).
 
 Definitions:
@@ -296,6 +304,9 @@ At inhale start:
      - on automatic cycle transition into INHALE, or
      - on `ESC` reset to auto mode.
    - Offset does not advance on manual phase stepping (`n` / `N`).
+   - Offset advances in manual INHALE lane stepping:
+     - `s`: `offset = (offset + 1) % lane_count`
+     - `S`: `offset = (offset + lane_count - 1) % lane_count`
    - Offset is included in determinism: same seed + same offset => same lane assignments.
 3) Assign each dot a preferred lane index:
    - If `lane_count >= num_dots`: assign unique lanes by taking the first `num_dots` lanes starting at `center_lane_rr_offset` (wrapping around).
@@ -332,6 +343,8 @@ This prevents deadlock while preserving the intent: “unique center segments if
 Center-lane uniqueness and rotation apply **only to INHALE path generation**.
 - PAUSE phases do not use or depend on path routing.
 - EXHALE is wavefront-based and does not use routing/path distinctness.
+
+INHALE-only lane iteration (`s/S`) is also an INHALE-only concern: it exists solely to re-run the INHALE path generation with a different `center_lane_rr_offset` without stepping phases.
 
 ### 5.4 LED path expansion
 Once we have an ordered list of segments with direction, for each segment step:
@@ -469,6 +482,21 @@ When manual mode is enabled:
 - `ESC` disables manual and resets to auto phase = INHALE with new random starts.
 - `center_lane_rr_offset_` advances only when INHALE is (re)initialized in auto mode (auto cycle transition into INHALE, or `ESC` reset). It does not advance on manual phase stepping.
 
+INHALE-only lane stepping (v2.5):
+- If manual mode is enabled and phase is `INHALE`:
+  - `s` increments `center_lane_rr_offset_` (wrap modulo `lane_count`) and reinitializes INHALE.
+  - `S` decrements `center_lane_rr_offset_` (wrap modulo `lane_count`) and reinitializes INHALE.
+- In any other phase (or if not manual), `s/S` are ignored.
+
+Reinitialization scope for `s/S` (INHALE reinit):
+- Reuse `dist_to_center` if center + active subgraph are unchanged (allowed and recommended).
+- Re-run start selection from the farthest pool (deterministic RNG).
+- Re-run center-lane assignment using the updated offset.
+- Regenerate per-dot vertex paths and LED index paths (refresh caches as needed).
+
+Determinism note:
+- `s/S` are a debugging/iteration tool; INHALE results must be deterministic given the same RNG seed and the same keypress sequence.
+
 ---
 
 ## 10) Files to Change (Implementation checklist)
@@ -490,7 +518,8 @@ When manual mode is enabled:
 
 ### Runtime wiring (controls already exist)
 - `src/main_runtime.cpp`
-  - No new controls required; mode 7 already has `n/N/ESC`.
+  - Add key handling for `s/S` alongside `n/N/ESC`.
+  - Wire `s/S` to “reinitialize INHALE with offset update” (manual mode + INHALE only).
   - Possibly add optional debug printing (dot start vertices, beat targets, exhale counts) behind a flag.
 
 ### Tests (native)
@@ -509,6 +538,10 @@ When manual mode is enabled:
     - pause beat-count completion and crossfade progress
     - pause fail-safe: with no external beat events, virtual beats trigger and the pause still completes within bounded time
     - exhale termination when wavefront counts reach 7 on all outer edges
+    - INHALE-only lane stepping:
+      - in manual mode + phase `INHALE`: `s` increments and `S` decrements `center_lane_rr_offset` with wrap-around
+      - in other phases: `s/S` do not affect offset or phase
+      - wrap-around: increment from `lane_count-1` -> `0`, decrement from `0` -> `lane_count-1`
 
 Determinism requirements:
 - Use a deterministic RNG seed in tests.
