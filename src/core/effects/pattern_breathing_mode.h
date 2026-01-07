@@ -60,7 +60,6 @@ class BreathingEffect final : public IEffect {
 
     rng_state_ = seed_from_time(now_ms);
     center_lane_rr_offset_ = 0;
-    inhale_cycles_done_ = 0;
 
     phase_ = Phase::Inhale;
     phase_start_ms_ = now_ms;
@@ -160,7 +159,9 @@ class BreathingEffect final : public IEffect {
   static constexpr uint8_t kMaxSegments = 40;
   static constexpr uint8_t kMaxDegree = 6;
   static constexpr uint8_t kLedsPerSegment = 14;
-  static constexpr uint8_t kMaxDots = 12;
+  static constexpr uint8_t kMaxDots = 36;          // pool of active inhale dots (supports overlap)
+  static constexpr uint8_t kMaxDotsPerBatch = 12;  // per "contraction experience"
+  static constexpr uint8_t kMaxInhaleBatches = 8;
   static constexpr uint8_t kMaxWaves = 16;
   static constexpr uint8_t kMaxVertexPathLen = 32;
 
@@ -389,7 +390,6 @@ class BreathingEffect final : public IEffect {
     phase_complete_ = false;
     switch (phase_) {
       case Phase::Inhale:
-        inhale_cycles_done_ = 0;
         inhale_cycles_target_ = cfg_.inhale_cycles_target ? cfg_.inhale_cycles_target : 1;
         if (inhale_cycles_target_ > 50) inhale_cycles_target_ = 50;
         init_inhale(now_ms, /*advance_rr_offset=*/auto_transition_into_inhale, /*regenerate_paths=*/true);
@@ -410,43 +410,110 @@ class BreathingEffect final : public IEffect {
   struct Dot {
     uint8_t start_v = 0;
     uint8_t goal_v = 0;  // center neighbor used as lane
+    uint8_t batch_id = 0;
     uint8_t step_count = 0;
     uint8_t step_seg[kMaxVertexPathLen] = {};
     uint8_t step_dir[kMaxVertexPathLen] = {};  // 0=A->B, 1=B->A (canonical endpoints)
     uint16_t total_leds = 0;
     uint32_t pos16 = 0;
+    bool active = false;
     bool done = true;
     bool failed = false;
   };
 
-  void init_inhale(uint32_t now_ms, bool advance_rr_offset, bool regenerate_paths) {
-    (void)now_ms;
-    if (advance_rr_offset && center_lane_count_ > 0) {
-      center_lane_rr_offset_ = static_cast<uint8_t>((center_lane_rr_offset_ + 1U) % center_lane_count_);
+  struct InhaleBatch {
+    uint8_t id = 0;
+    uint8_t dot_count = 0;
+    uint8_t done_count = 0;
+    bool spawned_next = false;
+    bool active = false;
+  };
+
+  InhaleBatch* find_inhale_batch(uint8_t id) {
+    for (uint8_t i = 0; i < kMaxInhaleBatches; ++i) {
+      if (inhale_batches_[i].active && inhale_batches_[i].id == id) return &inhale_batches_[i];
     }
+    return nullptr;
+  }
 
-    inhale_dot_count_ = cfg_.num_dots;
-    if (inhale_dot_count_ > kMaxDots) inhale_dot_count_ = kMaxDots;
-    if (inhale_dot_count_ > active_vertex_count_) inhale_dot_count_ = active_vertex_count_;
-
-    // If the center has no lanes, inhale is a no-op.
-    if (center_lane_count_ == 0 || inhale_dot_count_ == 0) {
-      for (uint8_t i = 0; i < kMaxDots; ++i) dots_[i] = Dot{};
-      inhale_all_done_ = true;
-      phase_complete_ = true;
-      return;
+  uint8_t active_dot_slots() const {
+    uint8_t n = 0;
+    for (uint8_t i = 0; i < kMaxDots; ++i) {
+      if (dots_[i].active) ++n;
     }
+    return n;
+  }
 
-    if (!regenerate_paths) {
-      for (uint8_t i = 0; i < inhale_dot_count_; ++i) {
-        dots_[i].pos16 = 0;
-        dots_[i].done = false;
+  uint8_t active_batch_slots() const {
+    uint8_t n = 0;
+    for (uint8_t i = 0; i < kMaxInhaleBatches; ++i) {
+      if (inhale_batches_[i].active) ++n;
+    }
+    return n;
+  }
+
+  void clear_inhale_state() {
+    for (uint8_t i = 0; i < kMaxDots; ++i) dots_[i] = Dot{};
+    for (uint8_t i = 0; i < kMaxInhaleBatches; ++i) inhale_batches_[i] = InhaleBatch{};
+    inhale_batches_started_ = 0;
+    inhale_batches_completed_ = 0;
+    inhale_next_batch_id_ = 1;
+  }
+
+  bool allocate_dot_slot(uint8_t* out_idx) {
+    if (out_idx == nullptr) return false;
+    for (uint8_t i = 0; i < kMaxDots; ++i) {
+      if (!dots_[i].active) {
+        *out_idx = i;
+        return true;
       }
-      inhale_all_done_ = false;
-      return;
     }
+    return false;
+  }
 
-    inhale_all_done_ = false;
+  bool allocate_batch_slot(uint8_t* out_idx) {
+    if (out_idx == nullptr) return false;
+    for (uint8_t i = 0; i < kMaxInhaleBatches; ++i) {
+      if (!inhale_batches_[i].active) {
+        *out_idx = i;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void free_batch_dots(uint8_t batch_id) {
+    for (uint8_t i = 0; i < kMaxDots; ++i) {
+      if (!dots_[i].active) continue;
+      if (dots_[i].batch_id != batch_id) continue;
+      dots_[i].active = false;
+    }
+  }
+
+  void restart_active_dots() {
+    for (uint8_t i = 0; i < kMaxDots; ++i) {
+      if (!dots_[i].active) continue;
+      dots_[i].pos16 = 0;
+      dots_[i].done = false;
+      dots_[i].failed = false;
+    }
+  }
+
+  bool spawn_inhale_batch(uint8_t dots_per_batch) {
+    if (inhale_batches_started_ >= inhale_cycles_target_) return false;
+    if (center_lane_count_ == 0 || dots_per_batch == 0) return false;
+    if (static_cast<uint8_t>(active_dot_slots() + dots_per_batch) > kMaxDots) return false;
+
+    uint8_t batch_slot = 0;
+    if (!allocate_batch_slot(&batch_slot)) return false;
+
+    InhaleBatch b;
+    b.id = inhale_next_batch_id_++;
+    b.dot_count = dots_per_batch;
+    b.done_count = 0;
+    b.spawned_next = false;
+    b.active = true;
+    inhale_batches_[batch_slot] = b;
 
     // Build sorted vertex candidates for farthest pool selection.
     uint8_t cand[kMaxVertices];
@@ -457,14 +524,12 @@ class BreathingEffect final : public IEffect {
       if (dist_to_center_[v] == 0xFF) continue;
       cand[cand_len++] = v;
     }
-
-    // Starts must be distinct and cannot include the center; clamp accordingly.
-    if (inhale_dot_count_ > cand_len) inhale_dot_count_ = cand_len;
-    if (inhale_dot_count_ == 0) {
-      inhale_all_done_ = true;
-      phase_complete_ = true;
-      return;
+    if (dots_per_batch > cand_len) dots_per_batch = cand_len;
+    if (dots_per_batch == 0) {
+      inhale_batches_[batch_slot].active = false;
+      return false;
     }
+    inhale_batches_[batch_slot].dot_count = dots_per_batch;
 
     // Sort: dist desc, degree asc, vertex_id asc.
     for (uint8_t i = 1; i < cand_len; ++i) {
@@ -485,30 +550,35 @@ class BreathingEffect final : public IEffect {
       cand[static_cast<uint8_t>(j + 1)] = key;
     }
 
-    uint8_t n_farthest = static_cast<uint8_t>(inhale_dot_count_ * 2U);
-    if (n_farthest < inhale_dot_count_) n_farthest = inhale_dot_count_;
+    uint8_t n_farthest = static_cast<uint8_t>(dots_per_batch * 2U);
+    if (n_farthest < dots_per_batch) n_farthest = dots_per_batch;
     if (n_farthest > cand_len) n_farthest = cand_len;
     if (n_farthest == 0) {
-      inhale_all_done_ = true;
-      phase_complete_ = true;
-      return;
+      inhale_batches_[batch_slot].active = false;
+      return false;
     }
 
     uint8_t pool[kMaxVertices];
     uint8_t pool_len = n_farthest;
     for (uint8_t i = 0; i < pool_len; ++i) pool[i] = cand[i];
 
-    for (uint8_t i = 0; i < inhale_dot_count_; ++i) {
-      dots_[i] = Dot{};
+    for (uint8_t i = 0; i < dots_per_batch; ++i) {
+      uint8_t dot_slot = 0;
+      if (!allocate_dot_slot(&dot_slot)) break;
+
+      dots_[dot_slot] = Dot{};
+      dots_[dot_slot].active = true;
+      dots_[dot_slot].batch_id = inhale_batches_[batch_slot].id;
+
       const uint8_t pick = static_cast<uint8_t>(rand_u32() % pool_len);
       const uint8_t start_v = pool[pick];
       pool[pick] = pool[static_cast<uint8_t>(pool_len - 1U)];
       pool_len = static_cast<uint8_t>(pool_len - 1U);
 
-      dots_[i].start_v = start_v;
-      dots_[i].done = false;
-      dots_[i].failed = false;
-      dots_[i].pos16 = 0;
+      dots_[dot_slot].start_v = start_v;
+      dots_[dot_slot].done = false;
+      dots_[dot_slot].failed = false;
+      dots_[dot_slot].pos16 = 0;
 
       // Assign a lane (goal vertex adjacent to center) with round-robin offset.
       uint8_t lane_index = static_cast<uint8_t>((i + center_lane_rr_offset_) % center_lane_count_);
@@ -519,22 +589,51 @@ class BreathingEffect final : public IEffect {
       for (uint8_t attempt = 0; attempt < center_lane_count_; ++attempt) {
         lane_index = static_cast<uint8_t>((i + center_lane_rr_offset_ + attempt) % center_lane_count_);
         goal_v = center_lane_neighbor_[lane_index];
-        ok = build_inhale_dot_path(start_v, goal_v, &dots_[i]);
+        ok = build_inhale_dot_path(start_v, goal_v, &dots_[dot_slot]);
         if (ok) break;
       }
       if (!ok) {
-        dots_[i].failed = true;
-        dots_[i].done = true;
+        dots_[dot_slot].failed = true;
+        dots_[dot_slot].done = true;
+        inhale_batches_[batch_slot].done_count = static_cast<uint8_t>(inhale_batches_[batch_slot].done_count + 1U);
       }
+      if (pool_len == 0) break;
     }
 
-    // Completion for inhale ignores failed dots.
-    inhale_all_done_ = true;
-    for (uint8_t i = 0; i < inhale_dot_count_; ++i) {
-      if (!dots_[i].done) {
-        inhale_all_done_ = false;
-        break;
-      }
+    inhale_batches_started_ = static_cast<uint8_t>(inhale_batches_started_ + 1U);
+    return true;
+  }
+
+  void init_inhale(uint32_t now_ms, bool advance_rr_offset, bool regenerate_paths) {
+    (void)now_ms;
+    if (advance_rr_offset && center_lane_count_ > 0) {
+      center_lane_rr_offset_ = static_cast<uint8_t>((center_lane_rr_offset_ + 1U) % center_lane_count_);
+    }
+
+    inhale_dot_count_ = cfg_.num_dots;
+    if (inhale_dot_count_ > kMaxDotsPerBatch) inhale_dot_count_ = kMaxDotsPerBatch;
+    if (inhale_dot_count_ > active_vertex_count_) inhale_dot_count_ = active_vertex_count_;
+
+    // If the center has no lanes, inhale is a no-op.
+    if (center_lane_count_ == 0 || inhale_dot_count_ == 0) {
+      clear_inhale_state();
+      inhale_all_done_ = true;
+      phase_complete_ = true;
+      return;
+    }
+
+    if (!regenerate_paths) {
+      // Manual inhale "loop": keep existing paths but restart motion.
+      restart_active_dots();
+      inhale_all_done_ = false;
+      return;
+    }
+
+    clear_inhale_state();
+    inhale_all_done_ = false;
+    if (!spawn_inhale_batch(inhale_dot_count_)) {
+      inhale_all_done_ = true;
+      phase_complete_ = true;
     }
   }
 
@@ -718,43 +817,35 @@ class BreathingEffect final : public IEffect {
     const uint32_t dt = dt_ms_from_frame(frame);
     (void)led_count;
 
+    // Advance all active dots; count completions per batch.
     inhale_all_done_ = true;
-    for (uint8_t i = 0; i < inhale_dot_count_; ++i) {
-      if (dots_[i].failed) continue;
-      if (!dots_[i].done) inhale_all_done_ = false;
-    }
-
-    if (inhale_all_done_) {
-      if (manual_enabled_) {
-        // Loop inhale motion in manual mode.
-        init_inhale(frame.now_ms, /*advance_rr_offset=*/false, /*regenerate_paths=*/false);
-        inhale_all_done_ = false;
-      } else {
-        inhale_cycles_done_ = static_cast<uint8_t>(inhale_cycles_done_ + 1U);
-        if (inhale_cycles_done_ >= inhale_cycles_target_) {
-          phase_complete_ = true;
-          return;
-        }
-        init_inhale(frame.now_ms, /*advance_rr_offset=*/false, /*regenerate_paths=*/true);
-        inhale_all_done_ = false;
-      }
-    }
-
-    for (uint8_t i = 0; i < inhale_dot_count_; ++i) {
+    uint8_t any_active = 0;
+    for (uint8_t i = 0; i < kMaxDots; ++i) {
       Dot& d = dots_[i];
-      if (d.failed || d.done || d.total_leds == 0) continue;
+      if (!d.active) continue;
+      any_active = 1;
+      if (d.failed) continue;
+      if (!d.done) inhale_all_done_ = false;
+      if (d.done || d.total_leds == 0) continue;
+
       const uint32_t delta = static_cast<uint32_t>(cfg_.dot_speed_q16) * dt;
       d.pos16 += delta;
       const uint32_t end16 = static_cast<uint32_t>(d.total_leds) << 16;
       if (d.pos16 >= end16) {
         d.pos16 = end16 ? (end16 - 1U) : 0;
         d.done = true;
+        InhaleBatch* b = find_inhale_batch(d.batch_id);
+        if (b != nullptr) {
+          b->done_count = static_cast<uint8_t>(b->done_count + 1U);
+        }
       }
     }
+    if (!any_active) inhale_all_done_ = true;
 
-    // Render dots with brightness-only tails.
-    for (uint8_t i = 0; i < inhale_dot_count_; ++i) {
+    // Render dots with brightness-only tails (all active dots, including those now at center).
+    for (uint8_t i = 0; i < kMaxDots; ++i) {
       const Dot& d = dots_[i];
+      if (!d.active) continue;
       if (d.failed || d.total_leds == 0) continue;
       const uint16_t head = static_cast<uint16_t>(d.pos16 >> 16);
       const uint8_t tail = cfg_.tail_length_leds;
@@ -767,6 +858,52 @@ class BreathingEffect final : public IEffect {
             static_cast<uint8_t>((static_cast<uint16_t>(kTailLut[t]) * frame.params.brightness) / 255U);
         blend_max(out, gi, scale(kInhaleDotColor, v));
       }
+    }
+
+    if (manual_enabled_) {
+      // Manual inhale loops continuously; no overlap spawning.
+      if (any_active && inhale_all_done_) {
+        init_inhale(frame.now_ms, /*advance_rr_offset=*/false, /*regenerate_paths=*/false);
+      }
+      return;
+    }
+
+    // Auto inhale:
+    // - spawn a new contraction once ~half the dots in the most-recently-spawned batch have reached center
+    // - finish the phase once the target number of batches have completed and no dots remain active
+    const uint8_t target_batches = inhale_cycles_target_;
+
+    // Ensure we keep running even if all batches are done/freed early.
+    if (inhale_batches_started_ < target_batches && active_batch_slots() == 0 && active_dot_slots() == 0) {
+      (void)spawn_inhale_batch(inhale_dot_count_);
+    }
+
+    // Spawn next batch when a batch crosses the "half reached center" threshold.
+    for (uint8_t i = 0; i < kMaxInhaleBatches; ++i) {
+      InhaleBatch& b = inhale_batches_[i];
+      if (!b.active) continue;
+      if (b.spawned_next) continue;
+      if (inhale_batches_started_ >= target_batches) continue;
+      const uint8_t thresh = static_cast<uint8_t>((b.dot_count + 1U) / 2U);
+      if (b.done_count < thresh) continue;
+      if (spawn_inhale_batch(inhale_dot_count_)) {
+        b.spawned_next = true;
+      }
+    }
+
+    // Complete any finished batches and free their dots (after rendering this frame).
+    for (uint8_t i = 0; i < kMaxInhaleBatches; ++i) {
+      InhaleBatch& b = inhale_batches_[i];
+      if (!b.active) continue;
+      if (b.done_count < b.dot_count) continue;
+      b.active = false;
+      free_batch_dots(b.id);
+      inhale_batches_completed_ = static_cast<uint8_t>(inhale_batches_completed_ + 1U);
+    }
+
+    if (inhale_batches_started_ >= target_batches && inhale_batches_completed_ >= target_batches &&
+        active_batch_slots() == 0 && active_dot_slots() == 0) {
+      phase_complete_ = true;
     }
   }
 
@@ -978,10 +1115,13 @@ class BreathingEffect final : public IEffect {
 
   // INHALE state.
   Dot dots_[kMaxDots] = {};
-  uint8_t inhale_dot_count_ = 0;
+  InhaleBatch inhale_batches_[kMaxInhaleBatches] = {};
+  uint8_t inhale_dot_count_ = 0;  // dots per batch
   bool inhale_all_done_ = false;
-  uint8_t inhale_cycles_target_ = 1;
-  uint8_t inhale_cycles_done_ = 0;
+  uint8_t inhale_cycles_target_ = 1;  // batches per inhale phase
+  uint8_t inhale_batches_started_ = 0;
+  uint8_t inhale_batches_completed_ = 0;
+  uint8_t inhale_next_batch_id_ = 1;
 
   // EXHALE state.
   uint32_t exhale_global_q16_ = 0;

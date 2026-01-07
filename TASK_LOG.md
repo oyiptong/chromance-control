@@ -870,6 +870,23 @@ Proof-of-life:
 - `pio test -e native`: PASSED (50 test cases)
 - `pio run -e runtime`: SUCCESS
 
+### 2026-01-07 — Mode 7: overlapping inhale contractions (spawn next at half-done)
+
+Status: 🟢 Done
+
+What was done:
+- Updated Mode 7 INHALE to support overlapping “contraction experiences”: when ~half the dots in an active batch have reached the center, a new batch of dots is spawned (capacity-limited), so multiple inward contractions can be visible concurrently.
+- Inhale continues to use `BreathingEffect::Config::num_dots` (default `9`) and `inhale_cycles_target` as the target number of inhale batches per phase; the phase completes once all target batches have finished and no dots remain active.
+- Center remains configurable via `BreathingEffect::Config::configured_center_vertex_id` (and `has_configured_center`), and can be set at runtime via `BreathingEffect::set_config()`.
+
+Files touched:
+- src/core/effects/pattern_breathing_mode.h
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (50 test cases)
+- `pio run -e runtime`: SUCCESS
+
 ### 2026-01-07 — Runtime: Mode 1 step-hold (`s`/`S`) to freeze advancement
 
 Status: 🟢 Done
