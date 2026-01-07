@@ -1,8 +1,8 @@
-# Breathing Pattern (Mode 7) — Improvement Report + Implementation Plan (v2)
+# Breathing Pattern (Mode 7) — Improvement Report + Implementation Plan (v2.2)
 
 Goal: upgrade Mode 7 (“Breathing”) from a geometry-heuristic animation into a topology-driven, event-driven breath loop:
 - 6 boundary-start dots (distinct boundary vertices) travel inward toward the center via topology edges (segments), preferring monotone progress in `dist_to_center`, never traversing a segment twice (per-dot), with smooth motion (tail, brightness-only).
-- Path “distinctness” is **local-to-boundary by default**: enforce global segment disjointness only for the first **K** steps from the boundary (K configurable, default 2; allowed 1–3). Paths may merge organically near the center.
+- Path “distinctness” uses a **center-lane policy**: prefer unique final center-incident segments per inhale, with round-robin rotation when reuse is unavoidable.
 - Pauses are beat-count driven (3–7 beats), with crossfade progress tied to beat count (future: beat signal).
 - Exhale ends when **all outer edges** have received **7 wavefronts** (tracked per outer segment).
 - Manual stepping remains consistent: `n` next stage, `N` previous stage, `ESC` back to auto.
@@ -123,7 +123,7 @@ Visual constraints:
 - Paths should be “downhill-preferred” in `dist_to_center`:
   - prefer strictly decreasing `dist_to_center` moves,
   - allow equal-distance moves only when plateau-safe (see §5.2).
-- Dots may converge near the center and may share final segments unless explicitly configured otherwise.
+- Dots may converge near the center, but the final “center lane” segment is subject to the center-lane policy (prefer unique use per inhale when possible; otherwise reuse rotates across inhales).
 
 ---
 
@@ -213,9 +213,9 @@ Recommended: “graph center” vertex.
 - Deterministic tie-break: among ties, pick the vertex with the smallest `(vx, vy)` lexicographically (or a fixed stable vertex index if you index vertices deterministically).
 
 Arrival semantics:
-- Default: dots target the chosen `center` vertex.
-- Optional mode (if desired): allow “center-adjacent arrival”, where a dot can terminate at any vertex with `dist_to_center == 1` (useful if the true visual “center” is a small cluster).
-- Do not require unique final segments unless explicitly enabled; shared final segments/vertices are allowed.
+- Dots target the chosen `center` vertex.
+- INHALE ends only when all dots reach `center` (event-driven completion).
+- The final segment into `center` is managed by the center-lane policy (§5.3).
 
 Alternative: geometric center of `(vx,vy)`, but graph-center is better for monotone `dist_to_center`.
 
@@ -232,11 +232,11 @@ This is the monotonic constraint reference.
 ### 5.1 Path generation overview
 At inhale start:
 1) Choose 6 distinct boundary start vertices randomly.
-2) For each start, generate a vertex path to center subject to constraints:
+2) Assign each dot a preferred “center lane” (a chosen center-incident segment) using the center-lane policy (§5.3).
+3) For each start, generate a vertex path to the chosen center-adjacent vertex `u` subject to constraints:
    - downhill-preferred in `dist_to_center` (strictly decreasing preferred; plateau-safe equals allowed)
    - no segment traversed twice (per-dot; always enforced)
-   - global disjointness enforced only near the boundary for the first K steps (default K=2; configurable 1–3)
-3) Convert each vertex path into an LED index path by expanding each segment step to its 14 LEDs.
+4) Append the final segment `u → center` to the path (center lane), then convert the full path into an LED index path by expanding each segment step to its 14 LEDs.
 
 ### 5.2 Constraints and selection rules
 For a dot at vertex `v`:
@@ -252,23 +252,64 @@ Canonical selection rule (“downhill-preferred walk”):
 1) Enumerate candidate neighbors that pass the validity rules above.
 2) Prefer candidates with `dist[u] < dist[v]`.
 3) Only consider `dist[u] == dist[v]` moves if plateau-safe (as defined above).
-4) Apply additional constraints/preferences in §5.3 (boundary-local disjointness).
+4) Apply center-lane constraints/preferences in §5.3 (applies only to the final approach into center).
 
-### 5.3 Uniqueness across the 6 paths
-Default requirement (v2): **reject full global edge-disjointness**. Do not require all six inhale paths to be globally segment-unique end-to-end.
+### 5.3 Distinctness policy (v2.2): center-lane preference + round-robin fallback
+This section replaces boundary-local disjointness. The goal is to avoid consistently overloading the same “final approach” segment into the center while still allowing paths to merge elsewhere (no global edge-disjoint solver).
 
-Required uniqueness (always enforced):
-- **Per-dot**: a dot may not traverse the same segment twice.
-- **Boundary-local global**: enforce global segment uniqueness only for the first **K** steps from the boundary (K configurable, default 2; allowed 1–3).
+Definitions:
+- `center`: the chosen center vertex (graph center or fixed vertex).
+- `center_segments`: the set of **present** segments incident to `center`.
+  - In vertex terms: neighbors `u` of `center` where an active edge `(u, center)` exists.
+  - In segment terms: `segId(u, center)` for each neighbor `u`.
+- “center lane”: choosing a particular neighbor `u` (equivalently the segment `(u, center)`) as a dot’s final approach into `center`.
 
-Why boundary-local disjointness only:
-- True global edge-disjointness can be impossible in graphs with bottlenecks/cuts (and can cause frequent “reroll until it works” behavior).
-- Visually, merging near the center is acceptable and often looks more organic.
+Policy (applies only to INHALE, only to the final approach into center):
+- **Primary goal:** within a single inhale, each center-incident segment is used by at most one dot **when possible**.
+- **When impossible** (e.g., `num_dots > deg(center)`): reuse is allowed, but must **rotate across inhales** so the same center segment is not consistently overloaded.
 
-Implementation approach:
-- Maintain `used_segments_global_prefix` that is consulted only while the dot is within its first K steps from the boundary.
-- Generation can be sequential: generate path0..path5, updating `used_segments_global_prefix` as you commit each path’s first K segments.
-- Outside the prefix window, you may still **prefer** unused segments to reduce overlap, but it is not required.
+#### 5.3.1 Explicit center-lane assignment step
+At inhale start:
+1) Enumerate available lanes:
+   - Build the neighbor list `center_neighbors[]` for the active subgraph.
+   - Define `lane_count = center_degree = len(center_neighbors)`.
+2) Maintain a persistent `center_lane_rr_offset` in the effect state:
+   - Offset advances by 1 modulo `lane_count` once per inhale start (or per auto-cycle reset).
+   - Offset is included in determinism: same seed + same offset => same lane assignments.
+3) Assign each dot a preferred lane index:
+   - If `lane_count >= num_dots`: assign unique lanes by taking the first `num_dots` lanes starting at `center_lane_rr_offset` (wrapping around).
+   - If `lane_count < num_dots`: assign lanes by cycling through lanes starting at `center_lane_rr_offset`, i.e. dot `j` gets lane `(offset + j) % lane_count`.
+
+This achieves:
+- Unique center segments when possible.
+- Balanced reuse when not possible, with rotation across inhales.
+
+#### 5.3.2 Route-to-lane path generation (then append lane)
+Instead of “route to center” directly:
+- For each dot, route from its boundary start `s` to its assigned center-adjacent vertex `u` (the neighbor associated with its lane).
+- Then append the final segment `u → center`.
+
+Constraints remain unchanged:
+- per-dot segment-simple (no segment reused within the dot),
+- downhill-preferred in `dist_to_center` (plateau-safe),
+- no backtracking.
+
+Note: to avoid dead-end routing, it’s acceptable to treat `u` as the “goal” and stop once reached, then append the final edge to `center`.
+
+#### 5.3.3 Fallback behavior if a lane is unreachable
+If a dot cannot reach its assigned `u` under constraints:
+1) Try alternate lanes in round-robin order starting from the dot’s assigned lane:
+   - attempt `lane = (assigned_lane + 1) % lane_count`, then `+2`, etc.
+2) If all lanes fail:
+   - relax **only** the center-lane uniqueness constraint for that dot (i.e., allow selecting a lane already used by another dot in this inhale if it becomes reachable),
+   - but never relax per-dot segment reuse (segment-simple must remain invariant).
+
+This prevents deadlock while preserving the intent: “unique center segments if possible, otherwise rotate overload”.
+
+#### 5.3.4 Phase separation (clarify scope)
+Center-lane uniqueness and rotation apply **only to INHALE path generation**.
+- PAUSE phases do not use or depend on path routing.
+- EXHALE is wavefront-based and does not use routing/path distinctness.
 
 ### 5.4 LED path expansion
 Once we have an ordered list of segments with direction, for each segment step:
@@ -378,6 +419,7 @@ Keep:
 - `phase_`
 - `phase_start_ms_` (for per-phase local time only, not for completion)
 - `manual_enabled_` and manual phase selection (already exists; adapt to new phases)
+- `center_lane_rr_offset_` (persistent across inhales; advances once per inhale start to rotate center-lane reuse)
 
 Phase completion conditions:
 - INHALE: `all_dots_done == true`
@@ -421,14 +463,16 @@ When manual mode is enabled:
     - inhale path monotonicity (`dist` non-increasing)
     - no segment reuse
     - 6 distinct boundary starts
-    - boundary-local disjointness (first K segments are globally unique)
+    - center-lane uniqueness when `deg(center) >= num_dots`
+    - center-lane reuse rotates across inhales when `deg(center) < num_dots` (round-robin offset)
+    - fallback behavior when a dot cannot reach its assigned lane (tries alternates; never violates per-dot segment-simple)
     - phase progression triggered by completion
     - pause beat-count completion and crossfade progress
     - exhale termination when wavefront counts reach 7 on all outer edges
 
 Determinism requirements:
 - Use a deterministic RNG seed in tests.
-- Ensure path generation is deterministic given the same seed and the same topology inputs (including deterministic center tie-breaks).
+- Ensure inhale lane assignment + routing is deterministic given: same seed, same center, same topology inputs, and the same `center_lane_rr_offset`.
 
 ---
 
@@ -437,10 +481,7 @@ Determinism requirements:
 1) Boundary heuristic:
    - confirm `degree==2` is acceptable as the default boundary definition for now, or specify a different boundary set.
 
-2) Center-adjacent arrival:
-   - confirm whether to keep the default “arrive at center vertex”, or enable “arrive at dist==1 ring” for visual reasons.
-
-3) Center selection (configurable center vertex):
+2) Center selection (configurable center vertex):
    - confirm whether center should be configured as a `(vx,vy)` coordinate (human-friendly) or as a generated `vertex_id` (compact/stable).
 
 ---

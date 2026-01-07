@@ -799,6 +799,23 @@ Files touched:
 Proof-of-life:
 - `wc -l breath_pattern_improvement_implementation_plan.md` → `553`
 
+### 2026-01-07 — Mode 7 plan v2.2: center-lane uniqueness + round-robin fallback
+
+Status: 🟢 Done
+
+What was done:
+- Refined the Mode 7 INHALE distinctness rules: removed boundary-local disjointness and replaced it with a center-lane policy that prefers unique center-incident segments per inhale when possible.
+- Added explicit lane assignment at inhale start (per-dot preferred center-adjacent vertex `u`) and a persistent round-robin offset to rotate unavoidable center-lane reuse across inhales.
+- Updated routing description to “route to `u`, then append `u→center`”, plus a clear fallback strategy (try alternate lanes; relax only center-lane uniqueness; never relax per-dot segment-simple).
+- Updated tests/determinism notes to cover center-lane uniqueness and rotation.
+
+Files touched:
+- breath_pattern_improvement_implementation_plan.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `wc -l breath_pattern_improvement_implementation_plan.md` → `594`
+
 ### 2026-01-05 — Runtime: “Seven_Comets” per-comet sequences (unique lengths + independent rerolls)
 
 Status: 🟢 Done
