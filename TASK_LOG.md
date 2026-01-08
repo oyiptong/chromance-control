@@ -733,6 +733,20 @@ Proof-of-life:
 - `pio test -e native`: PASSED (35 test cases)
 - `pio run -e runtime`: SUCCESS
 
+### 2026-01-08 — Effects: create UI-ready refactor design document
+
+Status: 🔵 Decision
+
+What was done:
+- Created an implementation-grade design document for refactoring the runtime effects system to be web-UI ready (enumerable effect catalog, typed parameters, persistence, and command routing), without implementing any UI.
+
+Files touched:
+- chromance_effects_refactor_design_document.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `wc -l chromance_effects_refactor_design_document.md`: 946 chromance_effects_refactor_design_document.md
+
 ### 2026-01-07 — Mode 7: swap inhale/exhale colors + 7×7 inhale + 14-wave exhale
 
 Status: 🟢 Done
