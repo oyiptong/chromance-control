@@ -454,7 +454,7 @@ flowchart LR
   subgraph core["src/core/** (portable)"]
     Manager[EffectManager\n(active effect + configs)]
     Router[CommandRouter\n(global vs effect)]
-    Catalog[EffectCatalog\n(descriptors + factory)]
+    Catalog[EffectCatalog\n(descriptors + non-owning pointers)]
     Effect[IEffectV2]
     Schema[EffectConfigSchema\n(ParamDescriptor[])]
   end
@@ -566,6 +566,8 @@ struct ParamValue {
 Notes:
 - Using `offset` avoids maps/dictionaries and keeps set/get O(1).
 - `name` strings can live in flash; in a “minimal footprint” build, `display_name/description` can be compiled out.
+- **Out of scope:** string/text *parameter values* are intentionally unsupported. Use enums, numeric IDs, fixed-size numbers, and colors.
+  - Rationale: avoids heap ownership/lifetime issues, keeps persistence blob layouts simple, and prevents per-frame parsing/allocations on an MCU.
 
 ### 5.3 Effect interface (v2)
 
@@ -573,19 +575,31 @@ Notes:
 // src/core/effects/effect_v2.h
 namespace chromance::core {
 
-struct EffectContext {
+// Render-time context: hot path, per-frame, must be allocation-free and side-effect-free.
+struct RenderContext {
   uint32_t now_ms;
   uint32_t dt_ms;
   const PixelsMap& map;
-  const MappingTables& mapping; // or static access, depending on current design
   EffectParams global_params;   // includes brightness
   Signals signals;
+};
 
-  // Side channels (no Arduino types; implemented by platform layer):
+// Event-time context: cold path only (serial input, UI actions, persistence).
+// Must NOT be passed into render; effects must not do persistence/logging from render().
+struct EventContext {
+  uint32_t now_ms;
+  const PixelsMap& map;
+  EffectParams global_params;
+  Signals signals;
+
+  // Cold-path side channels (platform-owned; may touch NVS/IO).
   class ISettingsStore* store;  // persisted config load/save
   class ILogger* logger;        // optional
 };
 
+// Key routing note:
+// - System/global keys (handled by the runtime/controller): effect selection, global brightness, global restart.
+// - Effect-scoped keys (forwarded to the active effect): stage stepping, effect-local toggles, etc.
 enum class Key : uint8_t { Digit1, Digit2, N, ShiftN, S, ShiftS, Esc, Plus, Minus };
 struct InputEvent { Key key; uint32_t now_ms; };
 
@@ -600,29 +614,41 @@ class IEffectV2 {
   virtual const EffectConfigSchema* schema() const = 0; // nullptr if no params
 
   // Called when this effect becomes active.
-  virtual void start(const EffectContext& ctx) = 0;
+  virtual void start(const EventContext& ctx) = 0;
 
   // Called when leaving the effect (optional).
-  virtual void stop(const EffectContext& ctx) { (void)ctx; }
+  virtual void stop(const EventContext& ctx) { (void)ctx; }
 
   // Reset runtime state (not persisted config).
-  virtual void reset_runtime(const EffectContext& ctx) = 0;
+  virtual void reset_runtime(const EventContext& ctx) = 0;
 
   // Handle discrete input events (serial, web UI later).
-  virtual void on_event(const InputEvent& ev, EffectContext& ctx) { (void)ev; (void)ctx; }
+  virtual void on_event(const InputEvent& ev, const EventContext& ctx) { (void)ev; (void)ctx; }
 
   // Optional stage support.
   virtual uint8_t stage_count() const { return 0; }
   virtual const StageDescriptor* stage_at(uint8_t i) const { (void)i; return nullptr; }
   virtual StageId current_stage() const { return StageId{0}; }
-  virtual bool enter_stage(StageId id, const EffectContext& ctx) { (void)id; (void)ctx; return false; }
+  virtual bool enter_stage(StageId id, const EventContext& ctx) { (void)id; (void)ctx; return false; }
 
   // Render always uses current runtime + config; must be allocation-free.
-  virtual void render(const EffectContext& ctx, Rgb* out_rgb, size_t led_count) = 0;
+  virtual void render(const RenderContext& ctx, Rgb* out_rgb, size_t led_count) = 0;
 };
 
 } // namespace chromance::core
 ```
+
+#### 5.3.1 How effects access persisted config during render (supported pattern)
+
+Supported pattern (single, preferred):
+- `EffectManager` owns each effect’s persisted config storage (one typed config struct per effect, or one fixed-size blob interpreted as that struct outside the render path).
+- When an effect becomes active (or when its config is reloaded), `EffectManager` passes a **typed pointer/reference** to the effect (e.g., via `start()` or a dedicated `bind_config(const Config&)` method).
+- `render()` reads configuration directly from that typed pointer/reference (no lookups, no casts).
+
+This keeps the hot path deterministic:
+- no heap,
+- no maps/dictionaries,
+- no `void*` casting in `render()`.
 
 Migration note:
 - Current effects already implement `reset(now_ms)` and `render(frame,map,...)`.
@@ -650,6 +676,12 @@ class EffectManager {
   bool set_active(EffectId id, uint32_t now_ms);  // persists active id (debounced)
   EffectId active_id() const;
   IEffectV2& active();
+
+  // Resets runtime state only (does not change persisted config).
+  void restart_active(uint32_t now_ms);
+
+  // Resets config to schema defaults, persists, and restarts if the effect is active.
+  bool reset_config_to_defaults(EffectId id, uint32_t now_ms);
 
   void on_event(const InputEvent& ev, uint32_t now_ms);
   void tick(uint32_t now_ms, uint32_t dt_ms, const Signals& signals);
@@ -700,6 +732,35 @@ class EffectRegistryV2 {
 };
 ```
 
+#### 5.4.2 Define what “EffectCatalog” is (concrete)
+
+In this doc, **EffectCatalog** is a thin, fixed-capacity wrapper around a registry like `EffectRegistryV2<MaxEffects>`.
+It stores **non-owning pointers** to effect instances plus their descriptors/schemas and provides enumeration + lookup.
+
+Minimal example:
+
+```cpp
+// src/core/effects/effect_catalog.h (proposed)
+namespace chromance::core {
+
+template <size_t MaxEffects>
+class EffectCatalog final {
+ public:
+  bool add(const EffectDescriptor& d, IEffectV2* e);
+  size_t count() const;
+  const EffectDescriptor* descriptor_at(size_t i) const;
+  IEffectV2* find_by_id(EffectId id) const;
+  // Optional: find_by_slug() for serial/UI commands; not used in render.
+};
+
+}  // namespace chromance::core
+```
+
+#### 5.4.3 Effect instance lifetime (explicit)
+
+Effects are expected to be **statically allocated** (e.g., globals in `main_runtime.cpp`) during migration and in the steady state.
+The catalog/registry stores **non-owning pointers**; factories and dynamic allocation are explicitly out of scope.
+
 ### 5.5 Sub-stage design (recommended + alternative)
 
 Recommended:
@@ -730,7 +791,7 @@ Refactor target:
 
 Recommendation:
 - Keep brightness as a **global** setting (current design), persisted in `RuntimeSettings`.
-- Effects read it via `EffectContext.global_params.brightness` and apply it as they do today.
+- Effects read it via `RenderContext.global_params.brightness` and apply it as they do today.
 
 If a future effect needs local brightness:
 - Model it as a per-effect parameter (e.g., “local_intensity”) that multiplies with global brightness.
@@ -765,6 +826,63 @@ Rationale:
 - Proven working in current repo (`src/platform/settings.cpp`).
 - Suitable for small config payloads.
 
+### 6.1.1 Define the settings store interface (blob-based)
+
+Core must not depend on ESP32 `Preferences` directly. Instead, define a small, platform-agnostic
+settings store interface that supports fixed-size blob read/write for per-effect config.
+
+File: `src/core/settings/effect_config_store.h` (proposed)
+
+```cpp
+namespace chromance::core {
+
+class ISettingsStore {
+ public:
+  virtual ~ISettingsStore() = default;
+
+  // Returns false when key is missing or on read failure.
+  // Implementations must not partially fill buffers.
+  virtual bool read_blob(const char* key, void* out, size_t out_size) const = 0;
+
+  // Returns false on write failure.
+  virtual bool write_blob(const char* key, const void* data, size_t size) = 0;
+};
+
+}  // namespace chromance::core
+```
+
+Platform implementation note:
+- ESP32 `Preferences` is one implementation (e.g., `Preferences::getBytes/putBytes`).
+- This must remain hidden behind `src/platform/**` so `src/core/**` stays Arduino/ESP-free.
+
+### 6.1.2 Explicit effect config blob size limits (compile-time)
+
+Introduce a global compile-time cap for persisted config blobs so that:
+- NVS writes are bounded and predictable (latency and space).
+- Per-effect config structs stay small by design (avoids “just add another field” drift).
+- Wear mitigation is easier (fewer bytes per write; fewer keys).
+
+Example (core header):
+
+```cpp
+// src/core/settings/effect_config_store.h (proposed)
+namespace chromance::core {
+constexpr size_t kMaxEffectConfigSize = 64; // bytes (per-effect payload, excluding key metadata)
+}
+```
+
+Each effect enforces the limit at compile time:
+
+```cpp
+struct BreathingConfig {
+  uint8_t dot_count;
+  uint8_t center_vertex_id;
+  // ...
+};
+static_assert(sizeof(BreathingConfig) <= chromance::core::kMaxEffectConfigSize,
+              "effect config too large; increase cap only with explicit justification");
+```
+
 ### 6.2 Key constraints (important)
 
 ESP32 NVS keys are limited in length (commonly 15 chars). The current keys (`bright_pct`, `mode`) are short.
@@ -775,7 +893,7 @@ Therefore, per-effect key naming must be compact. Two viable options:
 - Key per effect: e.g. `e01` / `e02` / `e0A` (hex id).
 - Value: fixed-size packed struct bytes.
 - Pros: few keys; easy debounce; future schema versioning inside blob.
-- Cons: needs `putBytes/getBytes` support in store wrapper (not present in current `IKeyValueStore` which is u8-only).
+- Cons: requires a blob-capable settings store interface (see §6.1.1). The current `IKeyValueStore` utilities are u8-only.
 
 **Option B: store per-param u8/u16 keys**
 - Keys like `e01p03` (still short).
@@ -833,6 +951,28 @@ if (dirty && (now_ms - last_change_ms) > 500) {
 Failure behavior:
 - If a write fails, keep dirty and retry with backoff.
 - If reads fail or data corrupt, fall back to defaults (safe mode).
+
+### 6.6 Error handling & fallback strategy (deterministic)
+
+Rules (no exceptions; never fail in the render path):
+
+- `set_param()` invalid input (wrong type/out of range):
+  - Return `false` (or a small error enum).
+  - Do not change the stored config.
+  - Keep the effect running with the previous config.
+
+- `enter_stage()` fails:
+  - Return `false`.
+  - Keep current stage unchanged (no partial transition).
+
+- Missing/corrupted/version-mismatched config blob:
+  - Missing: use schema defaults; mark dirty; persist once (debounced).
+  - Corrupt/unknown version: attempt migration; if not possible, reset to defaults and persist sanitized config (debounced).
+
+- Persistence write failure:
+  - Never block rendering.
+  - Keep dirty state and retry with debounce + backoff (e.g., exponential backoff capped to a few seconds).
+  - If repeated failures occur, continue running with in-RAM config and keep retrying opportunistically.
 
 ---
 
@@ -929,6 +1069,33 @@ Potential hotspots:
   - Mitigation: validate param type/size; keep everything O(1); avoid string lookup in the render path.
 
 ---
+
+## 9) Acceptance criteria (checklist)
+
+- `src/core/**` remains Arduino/ESP-free; `pio test -e native` continues to run.
+- Render loop remains allocation-free and side-effect-free:
+  - no persistence writes,
+  - no logging/printing,
+  - no parsing,
+  - no dynamic containers.
+- Effects are enumerable (catalog/registry) and selectable via stable IDs.
+- Effect configuration is typed, validated, and discoverable via schema descriptors.
+- Effect config persists across reboot with deterministic defaults + safe fallback on corrupt/missing data.
+- Serial shortcuts (`1–7`, `n/N`, `s/S`, `ESC`, `+/-`) remain functional via the new routing layer.
+
+## 10) Phased implementation plan (minimal-risk)
+
+1) Introduce `ISettingsStore` + blob cap (`kMaxEffectConfigSize`) and a Preferences-backed implementation in `src/platform/**`.
+2) Add `RenderContext`/`EventContext` + `IEffectV2` (adapter layer for existing `IEffect` where needed).
+3) Implement `EffectCatalog/EffectManager` with:
+   - active effect selection,
+   - config load/save (debounced),
+   - parameter set/get via schema offsets.
+4) Migrate one effect end-to-end (e.g., Mode 7) to validate:
+   - param schema,
+   - staged control,
+   - persistence + fallback behavior.
+5) Migrate remaining effects and replace the `main_runtime.cpp` per-mode routing with `CommandRouter`.
 
 ## Appendix: “Move control logic into effects” — how this doc supports that
 

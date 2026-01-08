@@ -747,6 +747,44 @@ Files touched:
 Proof-of-life:
 - `wc -l chromance_effects_refactor_design_document.md`: 946 chromance_effects_refactor_design_document.md
 
+### 2026-01-08 — Effects: refine design doc (blob cap, store interface, hot/cold contexts)
+
+Status: 🟢 Done
+
+What was done:
+- Tightened the refactor design doc with explicit embedded constraints:
+  - Added a compile-time per-effect config blob cap (`kMaxEffectConfigSize`) and `static_assert` guidance.
+  - Defined a minimal `ISettingsStore` interface with blob read/write (platform-agnostic).
+  - Split render vs event context (`RenderContext` vs `EventContext`) to keep persistence/logging out of the render path.
+  - Added deterministic error-handling/fallback rules and explicitly ruled out string/text parameters.
+  - Added acceptance criteria + phased implementation plan.
+
+Files touched:
+- chromance_effects_refactor_design_document.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `wc -l chromance_effects_refactor_design_document.md`: 1063 chromance_effects_refactor_design_document.md
+
+### 2026-01-08 — Effects: final tightening pass (config wiring, API completeness, lifetime)
+
+Status: 🟢 Done
+
+What was done:
+- Finalized remaining ambiguities in the effects refactor design doc:
+  - Clarified the supported pattern for config access during `render()` (typed pointer/reference bound on activation; no lookups/casts in hot path).
+  - Completed the `EffectManager` public API with `restart_active()` and `reset_config_to_defaults()`.
+  - Defined `EffectCatalog` concretely as a fixed-capacity, non-owning registry wrapper.
+  - Clarified system/global vs effect-scoped key routing.
+  - Documented effect instance lifetime (static allocation; no factories/dynamic loading).
+
+Files touched:
+- chromance_effects_refactor_design_document.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `wc -l chromance_effects_refactor_design_document.md`: 1113 chromance_effects_refactor_design_document.md
+
 ### 2026-01-07 — Mode 7: swap inhale/exhale colors + 7×7 inhale + 14-wave exhale
 
 Status: 🟢 Done
