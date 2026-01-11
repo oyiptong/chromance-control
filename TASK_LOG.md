@@ -733,6 +733,64 @@ Proof-of-life:
 - `pio test -e native`: PASSED (35 test cases)
 - `pio run -e runtime`: SUCCESS
 
+### 2026-01-11 — Web UI: refine PRE-PLAN (pass 2) (append-only)
+
+Status: 🟢 Done
+
+What was done:
+- Applied `docs/prompts/webui_preplan_refinement_2.md` to tighten guardrails in the Web UI PRE-PLAN (render-loop deadline gating policy, chunked static asset sending, JSON emission rules, deterministic alias collision policy, concrete global rate limits, destructive confirmation contract, OTA size awareness, forbidden frontend dependency categories).
+
+Files touched:
+- docs/plans/webui_preplan.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `wc -l docs/plans/webui_preplan.md`: 623
+
+### 2026-01-11 — Web UI: refine PRE-PLAN (pass 2)
+
+Status: 🟢 Done
+
+What was done:
+- Applied `docs/prompts/webui_preplan_refinement_2.md` to tighten guardrails (render-loop deadline gating policy, chunked static asset sending, JSON emission rules, deterministic alias collision policy, concrete global rate limits, destructive confirmation contract, OTA size awareness, forbidden frontend dependency categories).
+
+Files touched:
+- docs/plans/webui_preplan.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `wc -l docs/plans/webui_preplan.md`: 623
+
+### 2026-01-11 — Web UI: refine PRE-PLAN + fix path
+
+Status: 🟢 Done
+
+What was done:
+- Refined the firmware-hosted Web UI PRE-PLAN to be design-doc-ready per `docs/prompts/webui_preplan_refinement_1.md` (resolved architectural forks; added explicit guardrails; aligned persistence UX/API with blob-per-effect keys).
+- Added a deprecated-path stub at `docs/plan/webui_preplan.md` pointing to the canonical `docs/plans/webui_preplan.md` to prevent path confusion with earlier references.
+
+Files touched:
+- docs/plans/webui_preplan.md
+- docs/plan/webui_preplan.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `wc -l docs/plans/webui_preplan.md`: 585
+
+### 2026-01-11 — Web UI: create firmware-hosted WebUI PRE-PLAN
+
+Status: 🟢 Done
+
+What was done:
+- Authored a detailed PRE-PLAN for a firmware-hosted Web UI (Astro + Tailwind + daisyUI single theme + minimal Preact islands) including required routes, API surface, persistence handling, build/PlatformIO integration, and a comprehensive CODE MAP.
+
+Files touched:
+- docs/plan/webui_preplan.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `wc -l docs/plan/webui_preplan.md`: 446
+
 ### 2026-01-08 — Effects refactor: v2 scaffolding (catalog/manager + blob store)
 
 Status: 🟡 In progress
@@ -1573,3 +1631,17 @@ Files touched:
 Proof-of-life:
 - `pio test -e native`: PASSED (35 test cases)
 - `pio run -e runtime`: SUCCESS
+
+### 2026-01-11 — Web UI: refine PRE-PLAN (pass 2) (append-only)
+
+Status: 🟢 Done
+
+What was done:
+- Applied `docs/prompts/webui_preplan_refinement_2.md` to tighten guardrails in the Web UI PRE-PLAN (render-loop deadline gating policy, chunked static asset sending, JSON emission rules, deterministic alias collision policy, concrete global rate limits, destructive confirmation contract, OTA size awareness, forbidden frontend dependency categories).
+
+Files touched:
+- docs/plans/webui_preplan.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `wc -l docs/plans/webui_preplan.md`: 623
