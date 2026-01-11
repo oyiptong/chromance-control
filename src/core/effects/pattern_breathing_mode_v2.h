@@ -14,7 +14,20 @@ namespace core {
 
 namespace breathing_v2 {
 
-static_assert(sizeof(BreathingEffect::Config) <= kMaxEffectConfigSize, "Breathing config too large");
+// Persisted subset of Breathing config.
+// Note: field ordering is intentionally aligned with the previous (buggy) persisted layout so that
+// existing NVS blobs map cleanly:
+//   offset0: configured_center_vertex_id
+//   offset1: has_configured_center
+//   offset2: num_dots
+struct PersistedConfig {
+  uint8_t configured_center_vertex_id;
+  uint8_t has_configured_center;  // 0/1
+  uint8_t num_dots;
+  uint8_t _reserved0;
+};
+
+static_assert(sizeof(PersistedConfig) <= kMaxEffectConfigSize, "Breathing persisted config too large");
 
 static constexpr ParamId kPidUseConfiguredCenter = ParamId(1);
 static constexpr ParamId kPidCenterVertex = ParamId(2);
@@ -22,11 +35,11 @@ static constexpr ParamId kPidDotCount = ParamId(3);
 
 static const ParamDescriptor kParams[] = {
     {kPidUseConfiguredCenter, "use_configured_center", "Use Configured Center", ParamType::Bool,
-     static_cast<uint16_t>(offsetof(BreathingEffect::Config, has_configured_center)), 1, 0, 1, 1, 1},
+     static_cast<uint16_t>(offsetof(PersistedConfig, has_configured_center)), 1, 0, 1, 1, 1},
     {kPidCenterVertex, "center_vertex_id", "Center Vertex", ParamType::U8,
-     static_cast<uint16_t>(offsetof(BreathingEffect::Config, configured_center_vertex_id)), 1, 0, 31, 1, 12},
+     static_cast<uint16_t>(offsetof(PersistedConfig, configured_center_vertex_id)), 1, 0, 31, 1, 12},
     {kPidDotCount, "num_dots", "Dot Count", ParamType::U8,
-     static_cast<uint16_t>(offsetof(BreathingEffect::Config, num_dots)), 1, 1, 36, 1, 9},
+     static_cast<uint16_t>(offsetof(PersistedConfig, num_dots)), 1, 1, 36, 1, 9},
 };
 
 static const EffectConfigSchema kSchema{
@@ -50,12 +63,13 @@ class BreathingEffectV2 final : public IEffectV2 {
   const EffectConfigSchema* schema() const override { return &breathing_v2::kSchema; }
 
   void bind_config(const void* config_bytes, size_t config_size) override {
-    if (legacy_ == nullptr || config_bytes == nullptr || config_size < sizeof(BreathingEffect::Config)) {
+    if (legacy_ == nullptr || config_bytes == nullptr ||
+        config_size < sizeof(breathing_v2::PersistedConfig)) {
       cfg_ = nullptr;
       return;
     }
-    cfg_ = static_cast<const BreathingEffect::Config*>(config_bytes);
-    legacy_->set_config(*cfg_);
+    cfg_ = static_cast<const breathing_v2::PersistedConfig*>(config_bytes);
+    apply_config_to_legacy();
   }
 
   void start(const EventContext& ctx) override {
@@ -63,9 +77,7 @@ class BreathingEffectV2 final : public IEffectV2 {
       return;
     }
     legacy_->reset(ctx.now_ms);
-    if (cfg_ != nullptr) {
-      legacy_->set_config(*cfg_);
-    }
+    apply_config_to_legacy();
   }
 
   void reset_runtime(const EventContext& ctx) override {
@@ -73,9 +85,7 @@ class BreathingEffectV2 final : public IEffectV2 {
       return;
     }
     legacy_->reset(ctx.now_ms);
-    if (cfg_ != nullptr) {
-      legacy_->set_config(*cfg_);
-    }
+    apply_config_to_legacy();
   }
 
   void on_event(const InputEvent& ev, const EventContext& ctx) override {
@@ -149,9 +159,24 @@ class BreathingEffectV2 final : public IEffectV2 {
   }
 
  private:
+  void apply_config_to_legacy() {
+    if (legacy_ == nullptr) {
+      return;
+    }
+
+    // Start from legacy defaults to avoid "zeroed fields" regressions.
+    BreathingEffect::Config cfg;
+    if (cfg_ != nullptr) {
+      cfg.has_configured_center = (cfg_->has_configured_center != 0);
+      cfg.configured_center_vertex_id = cfg_->configured_center_vertex_id;
+      cfg.num_dots = cfg_->num_dots;
+    }
+    legacy_->set_config(cfg);
+  }
+
   EffectDescriptor descriptor_;
   BreathingEffect* legacy_ = nullptr;                  // non-owning
-  const BreathingEffect::Config* cfg_ = nullptr;       // points into manager-owned bytes
+  const breathing_v2::PersistedConfig* cfg_ = nullptr;  // points into manager-owned bytes
 };
 
 }  // namespace core

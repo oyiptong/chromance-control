@@ -22,11 +22,9 @@ void test_breathing_effect_v2_stage_and_event_routing() {
   BreathingEffectV2 v2(d, &legacy);
 
   alignas(4) uint8_t bytes[chromance::core::kMaxEffectConfigSize] = {};
-  BreathingEffect::Config cfg;
-  cfg.has_configured_center = true;
-  cfg.configured_center_vertex_id = 12;
-  cfg.num_dots = 5;
-  memcpy(bytes, &cfg, sizeof(cfg));
+  bytes[0] = 12;  // configured_center_vertex_id
+  bytes[1] = 1;   // has_configured_center
+  bytes[2] = 5;   // num_dots
   v2.bind_config(bytes, sizeof(bytes));
 
   PixelsMap map;
@@ -70,4 +68,3 @@ void test_breathing_effect_v2_stage_and_event_routing() {
   TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(BreathingEffect::Phase::Inhale),
                           static_cast<uint8_t>(legacy.phase()));
 }
-

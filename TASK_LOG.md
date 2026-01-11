@@ -822,6 +822,24 @@ Proof-of-life:
 - `pio run -e runtime`: SUCCESS
 - `pio run -e diagnostic`: SUCCESS
 
+### 2026-01-08 — Fix: Mode 7 stuck (v2 config blob no longer zeroes legacy defaults)
+
+Status: 🟢 Done
+
+What was done:
+- Fixed a regression where Mode 7 could get “stuck” (no phase progression) after reboot because the v2 persisted config blob only set a few fields and zeroed the rest of `BreathingEffect::Config` (e.g., speeds → 0).
+- `BreathingEffectV2` now persists a small `PersistedConfig` subset (center + dot count + use-configured-center) and merges it onto the legacy `BreathingEffect::Config` defaults before applying to the effect.
+
+Files touched:
+- src/core/effects/pattern_breathing_mode_v2.h
+- test/test_breathing_effect_v2.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (57 test cases)
+- `pio run -e runtime`: SUCCESS
+- `pio run -e diagnostic`: SUCCESS
+
 ### 2026-01-08 — Effects: create UI-ready refactor design document
 
 Status: 🔵 Decision
