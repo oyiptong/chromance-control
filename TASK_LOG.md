@@ -747,6 +747,53 @@ Files touched:
 Proof-of-life:
 - `wc -l docs/plans/webui_preplan.md`: 623
 
+### 2026-01-11 — Web UI: design doc formatting compliance pass
+
+Status: 🟢 Done
+
+What was done:
+- Updated `docs/plans/webui_design_doc.md` to comply with `docs/prompts/webui_design_doc_update.md` formatting requirements: endpoint headings moved to H4, required 3.4 frontend subsections added, and tables added for endpoints/constants/file lists/mappings.
+- Added file-path comments inside all “complete file” code blocks, as required by the prompt.
+- Removed an effect-specific example that introduced non-PRE-PLAN parameters and replaced it with a generic “update all `ParamDescriptor` initializers” procedure.
+
+Files touched:
+- docs/plans/webui_design_doc.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `wc -l docs/plans/webui_design_doc.md`: 3086
+- `rg -n "#### 3.2.3 Endpoint summary" docs/plans/webui_design_doc.md`: 224:#### 3.2.3 Endpoint summary (table)
+- `rg -n "| Severity | Risk |" docs/plans/webui_design_doc.md`: 3054:| Severity | Risk | Mitigation | What To Watch |
+
+### 2026-01-11 — Web UI: Mermaid validation (mmdc) + diagram fix
+
+Status: 🟢 Done
+
+What was done:
+- Validated Mermaid diagrams in `docs/plans/webui_design_doc.md` using the `~/.codex/skills/mermaid-validator` workflow (`mmdc`).
+- Fixed the system flow `flowchart` diagram by removing label characters that `mmdc` treats as syntax (`()`, `{}`), then re-validated.
+
+Files touched:
+- docs/plans/webui_design_doc.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `mmdc`: PASS (3 diagrams validated via extracted `.mmd` blocks; exit code 0)
+
+### 2026-01-11 — Web UI: write design doc + implementation plan
+
+Status: 🟢 Done
+
+What was done:
+- Authored the binding Web UI design document + comprehensive implementation plan based on `docs/plans/webui_preplan.md`, including Mermaid diagrams, full new-file contents (server + generators), API contracts, and explicit PlatformIO/partitioning integration.
+
+Files touched:
+- docs/plans/webui_design_doc.md
+- TASK_LOG.md
+
+Proof-of-life:
+- `wc -l docs/plans/webui_design_doc.md`: 2996
+
 ### 2026-01-11 — Web UI: refine PRE-PLAN (pass 2)
 
 Status: 🟢 Done
