@@ -2,7 +2,11 @@
 
 #include "core/brightness.h"
 #include "core/brightness_config.h"
+#include "core/effects/effect_catalog.h"
+#include "core/effects/effect_manager.h"
+#include "core/effects/legacy_effect_adapter.h"
 #include "core/effects/pattern_breathing_mode.h"
+#include "core/effects/pattern_breathing_mode_v2.h"
 #include "core/effects/pattern_coord_color.h"
 #include "core/effects/pattern_hrv_hexagon.h"
 #include "core/effects/pattern_index_walk.h"
@@ -16,6 +20,7 @@
 #include "core/mapping/pixels_map.h"
 #include "platform/led/dotstar_output.h"
 #include "platform/ota.h"
+#include "platform/effect_config_store_preferences.h"
 #include "platform/settings.h"
 
 namespace {
@@ -25,6 +30,7 @@ constexpr char kFirmwareVersion[] = "runtime-0.1.0";
 chromance::platform::DotstarOutput led_out;
 chromance::platform::OtaManager ota;
 chromance::platform::RuntimeSettings settings;
+chromance::platform::PreferencesSettingsStore effect_store;
 
 chromance::core::PixelsMap pixels_map;
 
@@ -42,7 +48,35 @@ chromance::core::RainbowPulseEffect rainbow_pulse{700, 2000, 700};
 chromance::core::TwoDotsEffect two_dots{25};
 chromance::core::HrvHexagonEffect hrv_hexagon;
 chromance::core::BreathingEffect breathing;
-chromance::core::IEffect* current_effect = &index_walk;
+
+constexpr size_t kMaxEffects = 7;
+chromance::core::EffectCatalog<kMaxEffects> effect_catalog;
+chromance::core::EffectManager<kMaxEffects> effect_manager;
+
+constexpr chromance::core::EffectDescriptor kMode1Desc{chromance::core::EffectId{1}, "index_walk",
+                                                       "Index_Walk_Test", nullptr};
+constexpr chromance::core::EffectDescriptor kMode2Desc{chromance::core::EffectId{2},
+                                                       "strip_segment_stepper",
+                                                       "Strip segment stepper", nullptr};
+constexpr chromance::core::EffectDescriptor kMode3Desc{chromance::core::EffectId{3}, "coord_color",
+                                                       "Coord_Color_Test", nullptr};
+constexpr chromance::core::EffectDescriptor kMode4Desc{chromance::core::EffectId{4}, "rainbow_pulse",
+                                                       "Rainbow_Pulse", nullptr};
+constexpr chromance::core::EffectDescriptor kMode5Desc{chromance::core::EffectId{5}, "seven_comets",
+                                                       "Seven_Comets", nullptr};
+constexpr chromance::core::EffectDescriptor kMode6Desc{chromance::core::EffectId{6}, "hrv_hexagon",
+                                                       "HRV hexagon", nullptr};
+constexpr chromance::core::EffectDescriptor kMode7Desc{chromance::core::EffectId{7}, "breathing",
+                                                       "Breathing", nullptr};
+
+chromance::core::LegacyEffectAdapter mode1_adapter{kMode1Desc, &index_walk};
+chromance::core::LegacyEffectAdapter mode2_adapter{kMode2Desc, &strip_segment_stepper};
+chromance::core::LegacyEffectAdapter mode3_adapter{kMode3Desc, &coord_color};
+chromance::core::LegacyEffectAdapter mode4_adapter{kMode4Desc, &rainbow_pulse};
+chromance::core::LegacyEffectAdapter mode5_adapter{kMode5Desc, &two_dots};
+chromance::core::LegacyEffectAdapter mode6_adapter{kMode6Desc, &hrv_hexagon};
+chromance::core::BreathingEffectV2 mode7_effect{kMode7Desc, &breathing};
+
 uint8_t current_mode = 1;
 
 chromance::core::FrameScheduler scheduler{50};  // 20ms default
@@ -77,56 +111,37 @@ void set_brightness_percent(uint8_t percent) {
   settings.set_brightness_percent(percent);
   params.brightness = chromance::core::soft_percent_to_u8_255(
       settings.brightness_percent(), chromance::core::kHardwareBrightnessCeilingPercent);
+  effect_manager.set_global_params(params);
   print_brightness();
+}
+
+void reset_mode_print_state() {
+  last_banner_led = 0xFFFF;
+  last_hrv_hex = 0xFF;
+  last_strip_segment_k = 0xFF;
+  mode2_hold = false;
+  last_indexwalk_scan_mode = 0xFF;
+  last_indexwalk_seg = 0xFF;
+  last_indexwalk_vertex = 0xFF;
+  last_banner_ms = 0;
 }
 
 void select_mode(uint8_t mode) {
   const uint8_t safe_mode = chromance::core::ModeSetting::sanitize(mode);
   settings.set_mode(safe_mode);
-
-  chromance::core::IEffect* effect = nullptr;
-  switch (safe_mode) {
-    case 1:
-      effect = &index_walk;
-      break;
-    case 2:
-      effect = &strip_segment_stepper;
-      break;
-    case 3:
-      effect = &coord_color;
-      break;
-    case 4:
-      effect = &rainbow_pulse;
-      break;
-    case 5:
-      effect = &two_dots;
-      break;
-    case 6:
-      effect = &hrv_hexagon;
-      break;
-    case 7:
-      effect = &breathing;
-      break;
-    default:
-      effect = &index_walk;
-      break;
+  const uint32_t now_ms = millis();
+  if (!effect_manager.set_active(chromance::core::EffectId{safe_mode}, now_ms)) {
+    (void)effect_manager.set_active(chromance::core::EffectId{1}, now_ms);
   }
-
-  if (effect == nullptr) {
-    effect = &index_walk;
-  }
-
-  current_mode = safe_mode;
-  current_effect = effect;
-  current_effect->reset(millis());
-  last_banner_led = 0xFFFF;
-  last_hrv_hex = 0xFF;
-  last_strip_segment_k = 0xFF;
-  mode2_hold = false;
+  current_mode =
+      chromance::core::ModeSetting::sanitize(static_cast<uint8_t>(effect_manager.active_id().value));
+  settings.set_mode(current_mode);
+  reset_mode_print_state();
   Serial.print("Mode ");
   Serial.print(static_cast<unsigned>(current_mode));
   Serial.print(": ");
-  Serial.println(current_effect->id());
+  const chromance::core::IEffectV2* e = effect_manager.active();
+  Serial.println(e ? e->descriptor().display_name : "?");
 }
 
 void print_hrv_hexagon_state() {
@@ -232,16 +247,41 @@ void setup() {
   scheduler.reset(millis());
 
   settings.begin();
+  effect_store.begin();
+
   params = chromance::core::EffectParams{};
   params.brightness = chromance::core::soft_percent_to_u8_255(
       settings.brightness_percent(), chromance::core::kHardwareBrightnessCeilingPercent);
+  effect_manager.set_global_params(params);
+
+  (void)effect_catalog.add(mode1_adapter.descriptor(), &mode1_adapter);
+  (void)effect_catalog.add(mode2_adapter.descriptor(), &mode2_adapter);
+  (void)effect_catalog.add(mode3_adapter.descriptor(), &mode3_adapter);
+  (void)effect_catalog.add(mode4_adapter.descriptor(), &mode4_adapter);
+  (void)effect_catalog.add(mode5_adapter.descriptor(), &mode5_adapter);
+  (void)effect_catalog.add(mode6_adapter.descriptor(), &mode6_adapter);
+  (void)effect_catalog.add(mode7_effect.descriptor(), &mode7_effect);
 
   Serial.println(
       "Commands: 1=Index_Walk_Test 2=Strip_Segment_Stepper 3=Coord_Color_Test 4=Rainbow_Pulse 5=Seven_Comets 6=HRV_hexagon 7=Breathing n=next(mode1/2/6/7) N=prev(mode2/6/7) s/S=step(mode1) lane(mode7 manual inhale) esc=auto(mode1/2/6/7) +=brightness_up -=brightness_down");
   Serial.print("Restored mode: ");
   Serial.println(static_cast<unsigned>(settings.mode()));
   print_brightness();
-  select_mode(settings.mode());
+
+  const uint8_t safe_mode = chromance::core::ModeSetting::sanitize(settings.mode());
+  effect_manager.init(effect_store, effect_catalog, pixels_map, millis(), chromance::core::EffectId{safe_mode});
+  current_mode = chromance::core::ModeSetting::sanitize(static_cast<uint8_t>(effect_manager.active_id().value));
+  settings.set_mode(current_mode);
+  reset_mode_print_state();
+  Serial.print("Restored effect: ");
+  Serial.print(static_cast<unsigned>(effect_manager.active_id().value));
+  Serial.print(" ");
+  const chromance::core::IEffectV2* e = effect_manager.active();
+  Serial.println(e ? e->descriptor().display_name : "?");
+  Serial.print("Mode ");
+  Serial.print(static_cast<unsigned>(current_mode));
+  Serial.print(": ");
+  Serial.println(e ? e->descriptor().display_name : "?");
 }
 
 void loop() {
@@ -286,7 +326,10 @@ void loop() {
         hrv_hexagon.next(now_ms);
         last_hrv_hex = 0xFF;
       } else if (current_mode == 7) {
-        breathing.next_phase(now_ms);
+        chromance::core::InputEvent ev;
+        ev.key = chromance::core::Key::N;
+        ev.now_ms = now_ms;
+        effect_manager.on_event(ev, now_ms);
       }
     }
     if (c == 'N') {
@@ -307,12 +350,18 @@ void loop() {
         hrv_hexagon.prev(now_ms);
         last_hrv_hex = 0xFF;
       } else if (current_mode == 7) {
-        breathing.prev_phase(now_ms);
+        chromance::core::InputEvent ev;
+        ev.key = chromance::core::Key::ShiftN;
+        ev.now_ms = now_ms;
+        effect_manager.on_event(ev, now_ms);
       }
     }
     if (c == 's') {
       if (current_mode == 7) {
-        breathing.lane_next(now_ms);
+        chromance::core::InputEvent ev;
+        ev.key = chromance::core::Key::S;
+        ev.now_ms = now_ms;
+        effect_manager.on_event(ev, now_ms);
       } else if (current_mode == 1) {
         if (index_walk.in_vertex_mode()) {
           // Pause vertex selection (manual), but keep looping the fill animation.
@@ -333,7 +382,10 @@ void loop() {
     }
     if (c == 'S') {
       if (current_mode == 7) {
-        breathing.lane_prev(now_ms);
+        chromance::core::InputEvent ev;
+        ev.key = chromance::core::Key::ShiftS;
+        ev.now_ms = now_ms;
+        effect_manager.on_event(ev, now_ms);
       } else if (current_mode == 1) {
         if (index_walk.in_vertex_mode()) {
           index_walk.clear_manual_hold(now_ms);
@@ -364,7 +416,10 @@ void loop() {
         strip_segment_stepper.set_auto_advance_enabled(true, now_ms);
         mode2_hold = false;
       } else if (current_mode == 7) {
-        breathing.set_auto(now_ms);
+        chromance::core::InputEvent ev;
+        ev.key = chromance::core::Key::Esc;
+        ev.now_ms = now_ms;
+        effect_manager.on_event(ev, now_ms);
       } else if (current_mode == 6) {
         hrv_hexagon.set_auto(now_ms);
         last_hrv_hex = 0xFF;
@@ -381,10 +436,10 @@ void loop() {
   }
 
   uint32_t frame_ms = ota.is_updating() ? 100 : 20;
-  if (current_effect == &hrv_hexagon) {
+  if (current_mode == 6) {
     frame_ms = 16;  // smoother fades for mode 6
   }
-  if (current_effect == &breathing) {
+  if (current_mode == 7) {
     frame_ms = 16;
   }
   scheduler.set_target_fps(frame_ms ? static_cast<uint16_t>(1000U / frame_ms) : 0);
@@ -394,17 +449,13 @@ void loop() {
   chromance::platform::PerfStats stats{0, 0};
   chromance::core::Signals signals;
   modulation.get_signals(now_ms, &signals);
-  chromance::core::EffectFrame frame;
-  frame.now_ms = now_ms;
-  frame.dt_ms = scheduler.dt_ms();
-  frame.signals = signals;
-  frame.params = params;
-  current_effect->render(frame, pixels_map, rgb, kLedCount);
+  effect_manager.tick(now_ms, scheduler.dt_ms(), signals);
+  effect_manager.render(rgb, kLedCount);
   const uint32_t frame_start_ms = millis();
   led_out.show(rgb, kLedCount, &stats);
   stats.frame_ms = millis() - frame_start_ms;
 
-  if (current_effect == &strip_segment_stepper) {
+  if (current_mode == 2) {
     const uint8_t k = strip_segment_stepper.segment_number();
     if (k != last_strip_segment_k) {
       last_strip_segment_k = k;
@@ -412,7 +463,7 @@ void loop() {
     }
   }
 
-  if (current_effect == &hrv_hexagon) {
+  if (current_mode == 6) {
     const uint8_t h = hrv_hexagon.current_hex_index();
     if (h != last_hrv_hex) {
       last_hrv_hex = h;
@@ -422,7 +473,7 @@ void loop() {
 
   // Print a small banner for note-taking while physically validating wiring.
   // Throttle to avoid spamming the UART.
-  if (current_effect == &index_walk) {
+  if (current_mode == 1) {
     const uint16_t lit = index_walk.active_index();
     const uint8_t seg = index_walk.active_seg();
     const uint8_t scan_mode = static_cast<uint8_t>(index_walk.scan_mode());

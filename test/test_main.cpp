@@ -15,6 +15,9 @@ void test_frame_scheduler_50fps_fixed_interval();
 void test_frame_scheduler_60fps_deterministic_rounding();
 
 void test_effect_registry_add_find_and_capacity();
+void test_effect_catalog_v2_add_find_and_capacity();
+void test_legacy_effect_adapter_calls_reset_and_passes_frame();
+void test_legacy_effect_adapter_null_map_blanks_and_does_not_call_render();
 
 void test_brightness_clamp_percent();
 void test_brightness_quantize_to_10_rounding();
@@ -54,6 +57,7 @@ void test_breathing_inhale_paths_are_monotone_and_segment_simple();
 void test_breathing_lane_step_only_affects_manual_inhale();
 void test_strip_segment_stepper_prev_wraps();
 void test_hrv_hexagon_manual_next_prev_and_auto_reset();
+void test_breathing_effect_v2_stage_and_event_routing();
 
 void test_null_modulation_provider_returns_defaults();
 
@@ -61,6 +65,9 @@ void test_mode_setting_sanitizes_values();
 void test_mode_setting_begin_reads_and_writes_back_sanitized();
 void test_mode_setting_begin_uses_default_when_missing();
 void test_mode_setting_set_mode_persists_sanitized();
+void test_effect_manager_v2_init_persists_active_id_and_binds_configs();
+void test_effect_manager_v2_set_get_param_and_persistence_debounce();
+void test_effect_manager_v2_set_active_calls_stop_start_and_events_render_flow();
 
 int main(int argc, char** argv) {
   (void)argc;
@@ -83,6 +90,9 @@ int main(int argc, char** argv) {
   RUN_TEST(test_frame_scheduler_60fps_deterministic_rounding);
 
   RUN_TEST(test_effect_registry_add_find_and_capacity);
+  RUN_TEST(test_effect_catalog_v2_add_find_and_capacity);
+  RUN_TEST(test_legacy_effect_adapter_calls_reset_and_passes_frame);
+  RUN_TEST(test_legacy_effect_adapter_null_map_blanks_and_does_not_call_render);
 
   RUN_TEST(test_brightness_clamp_percent);
   RUN_TEST(test_brightness_quantize_to_10_rounding);
@@ -122,6 +132,7 @@ int main(int argc, char** argv) {
   RUN_TEST(test_breathing_lane_step_only_affects_manual_inhale);
   RUN_TEST(test_strip_segment_stepper_prev_wraps);
   RUN_TEST(test_hrv_hexagon_manual_next_prev_and_auto_reset);
+  RUN_TEST(test_breathing_effect_v2_stage_and_event_routing);
 
   RUN_TEST(test_null_modulation_provider_returns_defaults);
 
@@ -129,6 +140,10 @@ int main(int argc, char** argv) {
   RUN_TEST(test_mode_setting_begin_reads_and_writes_back_sanitized);
   RUN_TEST(test_mode_setting_begin_uses_default_when_missing);
   RUN_TEST(test_mode_setting_set_mode_persists_sanitized);
+
+  RUN_TEST(test_effect_manager_v2_init_persists_active_id_and_binds_configs);
+  RUN_TEST(test_effect_manager_v2_set_get_param_and_persistence_debounce);
+  RUN_TEST(test_effect_manager_v2_set_active_calls_stop_start_and_events_render_flow);
 
   return UNITY_END();
 }

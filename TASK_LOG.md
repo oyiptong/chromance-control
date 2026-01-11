@@ -733,6 +733,95 @@ Proof-of-life:
 - `pio test -e native`: PASSED (35 test cases)
 - `pio run -e runtime`: SUCCESS
 
+### 2026-01-08 — Effects refactor: v2 scaffolding (catalog/manager + blob store)
+
+Status: 🟡 In progress
+
+What was done:
+- Added a portable, blob-based settings store interface (`ISettingsStore`) with an explicit per-effect config size cap (`kMaxEffectConfigSize=64`).
+- Introduced v2 effect plumbing in `src/core/**`:
+  - `IEffectV2` with `RenderContext` (hot path) vs `EventContext` (cold path)
+  - `EffectId` + `EffectDescriptor`
+  - `ParamDescriptor`/`EffectConfigSchema` + typed `ParamValue`
+  - `EffectCatalog` and `EffectManager` with debounced persistence + safe defaults
+- Added an ESP32 Preferences-backed implementation of `ISettingsStore` in `src/platform/**` (compiles in `env:runtime`).
+- Added native unit tests covering the new catalog/manager behavior (defaults, param set/get, debounced persistence, start/stop/event/render flow).
+
+Files touched:
+- src/core/settings/effect_config_store.h
+- src/core/effects/effect_id.h
+- src/core/effects/effect_descriptor.h
+- src/core/effects/params.h
+- src/core/effects/effect_v2.h
+- src/core/effects/effect_catalog.h
+- src/core/effects/effect_manager.h
+- src/platform/effect_config_store_preferences.h
+- src/platform/effect_config_store_preferences.cpp
+- test/test_effect_catalog_v2.cpp
+- test/test_effect_manager.cpp
+- test/test_main.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (54 test cases)
+- `pio run -e runtime`: SUCCESS
+- `pio run -e diagnostic`: SUCCESS
+
+### 2026-01-08 — Effects refactor: LegacyEffectAdapter + runtime uses EffectManager
+
+Status: 🟡 In progress
+
+What was done:
+- Added `LegacyEffectAdapter` to wrap existing v1 `IEffect` implementations behind `IEffectV2`.
+- Switched `src/main_runtime.cpp` to render/select effects via `EffectCatalog` + `EffectManager` (effect IDs currently mirror legacy modes 1..7).
+- Added a boot-time fallback: if `aeid` is missing, `EffectManager` uses the persisted legacy `mode` as the initial active effect, then persists `aeid`.
+- Made the v2 ID/value structs C++11-friendly for ESP32 builds (constructors instead of brace init on non-aggregate types).
+- Added unit tests for the legacy adapter.
+
+Files touched:
+- src/core/effects/legacy_effect_adapter.h
+- src/core/effects/effect_id.h
+- src/core/effects/effect_descriptor.h
+- src/core/effects/params.h
+- src/core/effects/effect_v2.h
+- src/core/effects/effect_manager.h
+- src/main_runtime.cpp
+- test/test_legacy_effect_adapter.cpp
+- test/test_main.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (56 test cases)
+- `pio run -e runtime`: SUCCESS
+- `pio run -e diagnostic`: SUCCESS
+
+### 2026-01-08 — Effects refactor: Mode 7 v2 (schema + stages + on_event)
+
+Status: 🟡 In progress
+
+What was done:
+- Added `BreathingEffectV2` (`Mode 7`) implementing `IEffectV2` features:
+  - stage enumeration (inhale/pause1/exhale/pause2)
+  - key handling via `on_event` (`n/N/ESC/s/S`)
+  - initial persisted config schema (center + dot count + “use configured center”)
+- Updated runtime so Mode 7 is no longer controlled directly from `main_runtime.cpp`; it forwards those keys to `EffectManager`.
+- Updated `EffectManager` to call `bind_config()` after `set_param()` / `reset_config_to_defaults()` so effects can react to config changes.
+- Added native unit test covering Mode 7 v2 stage + event routing.
+
+Files touched:
+- src/core/effects/pattern_breathing_mode_v2.h
+- src/core/effects/effect_manager.h
+- src/core/effects/effect_v2.h
+- src/main_runtime.cpp
+- test/test_breathing_effect_v2.cpp
+- test/test_main.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio test -e native`: PASSED (57 test cases)
+- `pio run -e runtime`: SUCCESS
+- `pio run -e diagnostic`: SUCCESS
+
 ### 2026-01-08 — Effects: create UI-ready refactor design document
 
 Status: 🔵 Decision
