@@ -43,9 +43,15 @@ class EffectManager final {
 
         char key[8] = {};
         if (make_effect_key(d->id, key, sizeof(key))) {
-          if (store_->read_blob(key, configs_[i].bytes, kMaxEffectConfigSize)) {
-            // Loaded persisted config bytes.
-          } else {
+          bool loaded = store_->read_blob(key, configs_[i].bytes, kMaxEffectConfigSize);
+          if (!loaded) {
+            // Backward compatibility: accept legacy uppercase keys (e00AF, etc.).
+            char key_upper[8] = {};
+            if (make_effect_key_upper(d->id, key_upper, sizeof(key_upper))) {
+              loaded = store_->read_blob(key_upper, configs_[i].bytes, kMaxEffectConfigSize);
+            }
+          }
+          if (!loaded) {
             // Missing/corrupt: defaults will be used; persist once (debounced).
             mark_dirty(i, now_ms_);
           }
@@ -123,6 +129,15 @@ class EffectManager final {
     now_ms_ = now_ms;
     EventContext ctx = make_event_context(now_ms_);
     active_effect_->reset_runtime(ctx);
+  }
+
+  bool enter_active_stage(StageId id, uint32_t now_ms) {
+    if (active_effect_ == nullptr) {
+      return false;
+    }
+    now_ms_ = now_ms;
+    EventContext ctx = make_event_context(now_ms_);
+    return active_effect_->enter_stage(id, ctx);
   }
 
   bool reset_config_to_defaults(EffectId id, uint32_t now_ms) {
@@ -267,17 +282,31 @@ class EffectManager final {
 
   ConfigState configs_[MaxEffects] = {};
 
-  static char hex_digit(uint8_t v) { return v < 10 ? static_cast<char>('0' + v) : static_cast<char>('A' + (v - 10)); }
+  static char hex_digit_lower(uint8_t v) { return v < 10 ? static_cast<char>('0' + v) : static_cast<char>('a' + (v - 10)); }
+  static char hex_digit_upper(uint8_t v) { return v < 10 ? static_cast<char>('0' + v) : static_cast<char>('A' + (v - 10)); }
 
   static bool make_effect_key(EffectId id, char* out, size_t out_size) {
     if (!id.valid() || out == nullptr || out_size < 6) {  // "eFFFF\0"
       return false;
     }
     out[0] = 'e';
-    out[1] = hex_digit(static_cast<uint8_t>((id.value >> 12) & 0xF));
-    out[2] = hex_digit(static_cast<uint8_t>((id.value >> 8) & 0xF));
-    out[3] = hex_digit(static_cast<uint8_t>((id.value >> 4) & 0xF));
-    out[4] = hex_digit(static_cast<uint8_t>((id.value >> 0) & 0xF));
+    out[1] = hex_digit_lower(static_cast<uint8_t>((id.value >> 12) & 0xF));
+    out[2] = hex_digit_lower(static_cast<uint8_t>((id.value >> 8) & 0xF));
+    out[3] = hex_digit_lower(static_cast<uint8_t>((id.value >> 4) & 0xF));
+    out[4] = hex_digit_lower(static_cast<uint8_t>((id.value >> 0) & 0xF));
+    out[5] = '\0';
+    return true;
+  }
+
+  static bool make_effect_key_upper(EffectId id, char* out, size_t out_size) {
+    if (!id.valid() || out == nullptr || out_size < 6) {  // "eFFFF\0"
+      return false;
+    }
+    out[0] = 'e';
+    out[1] = hex_digit_upper(static_cast<uint8_t>((id.value >> 12) & 0xF));
+    out[2] = hex_digit_upper(static_cast<uint8_t>((id.value >> 8) & 0xF));
+    out[3] = hex_digit_upper(static_cast<uint8_t>((id.value >> 4) & 0xF));
+    out[4] = hex_digit_upper(static_cast<uint8_t>((id.value >> 0) & 0xF));
     out[5] = '\0';
     return true;
   }
@@ -440,6 +469,9 @@ class EffectManager final {
       return false;
     }
     if (static_cast<size_t>(d.offset) + static_cast<size_t>(d.size) > kMaxEffectConfigSize) {
+      return false;
+    }
+    if (d.scale == 0) {
       return false;
     }
     if (d.step <= 0) {

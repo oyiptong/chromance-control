@@ -780,6 +780,98 @@ Files touched:
 Proof-of-life:
 - `mmdc`: PASS (3 diagrams validated via extracted `.mmd` blocks; exit code 0)
 
+### 2026-01-11 — Web UI: implement firmware-hosted UI + build pipeline
+
+Status: 🟢 Done
+
+What was done:
+- Implemented firmware `WebuiServer` (unified dispatcher, chunked static asset serving, JSON API, NVS persistence endpoints, per-boot confirm token, global rate limits) per `docs/plans/webui_design_doc.md`.
+- Added Web UI build pipeline scripts: deterministic gzip + embedded asset header generation and OTA partition safety margin enforcement.
+- Created `webui/` Astro + Tailwind + single-theme daisyUI + Preact islands project (static shells + leaf islands only).
+- Updated core/runtime integration: `ParamDescriptor::scale`, `EffectManager::enter_active_stage`, lowercase `e%04x` keys with legacy uppercase read-compat, and runtime starts/handles Web UI only when STA WiFi is connected.
+
+Files touched:
+- platformio.ini
+- scripts/generate_webui_assets.py
+- scripts/check_ota_margin.py
+- src/platform/webui_server.h
+- src/platform/webui_server.cpp
+- src/main_runtime.cpp
+- src/core/effects/params.h
+- src/core/effects/pattern_breathing_mode_v2.h
+- src/core/effects/effect_manager.h
+- test/test_effect_manager.cpp
+- webui/package.json
+- webui/package-lock.json
+- webui/astro.config.mjs
+- webui/tailwind.config.cjs
+- webui/postcss.config.cjs
+- webui/src/layouts/BaseLayout.astro
+- webui/src/styles/global.css
+- webui/src/pages/index.astro
+- webui/src/pages/effects/index.astro
+- webui/src/pages/settings/index.astro
+- webui/src/pages/settings/persistence/index.astro
+- webui/src/lib/api.ts
+- webui/src/lib/slug.ts
+- webui/src/islands/EffectListIsland.tsx
+- webui/src/islands/EffectDetailIsland.tsx
+- webui/src/islands/SettingsIsland.tsx
+- webui/src/islands/PersistenceIsland.tsx
+- .gitignore
+- TASK_LOG.md
+
+Notes / decisions:
+- Forbidden dependency enforcement is implemented as a lockfile scan of **declared root dependencies** (not raw substring scan) to avoid false positives from Astro toolchain transitive packages while still preventing explicit inclusion of forbidden frontend libs.
+
+Proof-of-life:
+- `pio test -e native`: PASSED (57 test cases)
+- `pio run -e runtime`: SUCCESS
+- OTA check: `OTA partition check: csv=min_spiffs.csv app_size=1966080 fw_size=712864 margin=196608 limit=1769472`
+
+### 2026-01-11 — Web UI: fix chunked static sender truncation
+
+Status: 🟢 Done
+
+What was done:
+- Fixed the chunked static asset sender to enforce the budget as “no forward progress for N ms” instead of “total send time”, preventing early connection close under initial TCP backpressure (which caused `curl: (18) transfer closed with N bytes remaining`).
+
+Files touched:
+- src/platform/webui_server.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio run -e runtime`: SUCCESS
+
+### 2026-01-11 — Web UI: fix `/api/*` Content-Length mismatch
+
+Status: 🟢 Done
+
+What was done:
+- Fixed `GET /api/effects`, `GET /api/effects/<slug>`, and `GET /api/settings/persistence/summary` to use `WebServer` chunked transfer encoding (`CONTENT_LENGTH_UNKNOWN` + `sendContent`) with a shared buffered writer, preventing `ERR_CONTENT_LENGTH_MISMATCH`.
+- Added a `/favicon.ico` handler returning HTTP 204 to avoid noisy 404s in the browser console.
+
+Files touched:
+- src/platform/webui_server.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio run -e runtime`: SUCCESS
+
+### 2026-01-11 — Web UI: fix invalid JSON in persistence summary
+
+Status: 🟢 Done
+
+What was done:
+- Fixed `GET /api/settings/persistence/summary` JSON output by removing an extra closing brace (was emitting `}}}` instead of `}}` at the end of the response).
+
+Files touched:
+- src/platform/webui_server.cpp
+- TASK_LOG.md
+
+Proof-of-life:
+- `pio run -e runtime`: SUCCESS
+
 ### 2026-01-11 — Web UI: write design doc + implementation plan
 
 Status: 🟢 Done

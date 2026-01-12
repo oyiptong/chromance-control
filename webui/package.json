@@ -1,0 +1,25 @@
+{
+  "name": "chromance-webui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "astro build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "astro": "4.16.0",
+    "@astrojs/preact": "3.5.4",
+    "preact": "10.22.0",
+    "tailwindcss": "3.4.17",
+    "daisyui": "4.12.22"
+  },
+  "devDependencies": {
+    "autoprefixer": "10.4.20",
+    "postcss": "8.4.49",
+    "typescript": "5.6.3",
+    "vitest": "2.1.8",
+    "jsdom": "25.0.1"
+  }
+}
+

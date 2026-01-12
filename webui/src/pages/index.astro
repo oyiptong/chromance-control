@@ -1,0 +1,14 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import EffectListIsland from "../islands/EffectListIsland";
+---
+<BaseLayout title="Chromance">
+  <h1 class="text-2xl font-bold">Chromance</h1>
+  <div class="mt-4">
+    <EffectListIsland client:load />
+  </div>
+  <div class="mt-6">
+    <a class="link" href="/settings">Settings</a>
+  </div>
+</BaseLayout>
+

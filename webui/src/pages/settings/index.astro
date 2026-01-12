@@ -1,0 +1,16 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import SettingsIsland from "../../islands/SettingsIsland";
+---
+<BaseLayout title="Settings">
+  <h1 class="text-2xl font-bold">Settings</h1>
+  <div class="mt-4">
+    <SettingsIsland client:load />
+  </div>
+  <div class="mt-6">
+    <a class="link" href="/settings/persistence">Persistence</a>
+    <span class="mx-2">·</span>
+    <a class="link" href="/">Home</a>
+  </div>
+</BaseLayout>
+

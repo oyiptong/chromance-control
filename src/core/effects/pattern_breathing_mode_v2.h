@@ -35,11 +35,11 @@ static constexpr ParamId kPidDotCount = ParamId(3);
 
 static const ParamDescriptor kParams[] = {
     {kPidUseConfiguredCenter, "use_configured_center", "Use Configured Center", ParamType::Bool,
-     static_cast<uint16_t>(offsetof(PersistedConfig, has_configured_center)), 1, 0, 1, 1, 1},
+     static_cast<uint16_t>(offsetof(PersistedConfig, has_configured_center)), 1, 0, 1, 1, 1, 1},
     {kPidCenterVertex, "center_vertex_id", "Center Vertex", ParamType::U8,
-     static_cast<uint16_t>(offsetof(PersistedConfig, configured_center_vertex_id)), 1, 0, 31, 1, 12},
+     static_cast<uint16_t>(offsetof(PersistedConfig, configured_center_vertex_id)), 1, 0, 31, 1, 12, 1},
     {kPidDotCount, "num_dots", "Dot Count", ParamType::U8,
-     static_cast<uint16_t>(offsetof(PersistedConfig, num_dots)), 1, 1, 36, 1, 9},
+     static_cast<uint16_t>(offsetof(PersistedConfig, num_dots)), 1, 1, 36, 1, 9, 1},
 };
 
 static const EffectConfigSchema kSchema{

@@ -7,3 +7,8 @@ mapping/pixels_bench.json
 tools/wled_spike/wled
 __pycache__
 *.pyc
+webui/node_modules
+webui/dist
+webui/dist_gz
+webui/dist_gz_size_report.json
+webui/dist_gz_size_report.txt

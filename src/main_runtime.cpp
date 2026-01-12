@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <WiFi.h>
 
 #include "core/brightness.h"
 #include "core/brightness_config.h"
@@ -22,6 +23,7 @@
 #include "platform/ota.h"
 #include "platform/effect_config_store_preferences.h"
 #include "platform/settings.h"
+#include "platform/webui_server.h"
 
 namespace {
 
@@ -49,9 +51,12 @@ chromance::core::TwoDotsEffect two_dots{25};
 chromance::core::HrvHexagonEffect hrv_hexagon;
 chromance::core::BreathingEffect breathing;
 
-constexpr size_t kMaxEffects = 7;
+constexpr size_t kMaxEffects = 32;
 chromance::core::EffectCatalog<kMaxEffects> effect_catalog;
 chromance::core::EffectManager<kMaxEffects> effect_manager;
+
+chromance::platform::WebuiServer webui{kFirmwareVersion, &settings, &params, &effect_manager, &effect_catalog};
+static bool webui_started = false;
 
 constexpr chromance::core::EffectDescriptor kMode1Desc{chromance::core::EffectId{1}, "index_walk",
                                                        "Index_Walk_Test", nullptr};
@@ -443,6 +448,19 @@ void loop() {
     frame_ms = 16;
   }
   scheduler.set_target_fps(frame_ms ? static_cast<uint16_t>(1000U / frame_ms) : 0);
+
+  if (WiFi.status() == WL_CONNECTED) {
+    if (!webui_started) {
+      webui.begin();
+      webui_started = true;
+    }
+    webui.handle(now_ms, scheduler.next_frame_ms());
+    if (webui.take_pending_restart()) {
+      ESP.restart();
+      return;
+    }
+  }
+
   if (!scheduler.should_render(now_ms)) return;
   last_render_ms = now_ms;
 

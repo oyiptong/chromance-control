@@ -32,6 +32,11 @@ struct ParamDescriptor {
   int32_t max;
   int32_t step;
   int32_t def;
+
+  // Fixed-point scale factor for float-exposed numeric params.
+  // scale=1 => integer UI, raw is stored as-is.
+  // scale>1 => UI value = raw / scale, firmware stores raw scaled integer.
+  uint16_t scale;
 };
 
 struct EffectConfigSchema {

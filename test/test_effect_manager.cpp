@@ -221,19 +221,19 @@ void test_effect_manager_v2_init_persists_active_id_and_binds_configs() {
 
   static const ParamDescriptor kParams[] = {
       {ParamId{kPidDotCount}, "dot_count", "Dot Count", ParamType::U8,
-       static_cast<uint16_t>(offsetof(DummyConfig, dot_count)), 1, 0, 20, 1, 9},
+       static_cast<uint16_t>(offsetof(DummyConfig, dot_count)), 1, 0, 20, 1, 9, 1},
       {ParamId{kPidCenterVertex}, "center_vertex", "Center Vertex", ParamType::U8,
-       static_cast<uint16_t>(offsetof(DummyConfig, center_vertex)), 1, 0, 255, 1, 12},
+       static_cast<uint16_t>(offsetof(DummyConfig, center_vertex)), 1, 0, 255, 1, 12, 1},
       {ParamId{kPidSpeed01}, "speed_01", "Speed", ParamType::U16,
-       static_cast<uint16_t>(offsetof(DummyConfig, speed_01)), 2, 0, 1000, 1, 100},
+       static_cast<uint16_t>(offsetof(DummyConfig, speed_01)), 2, 0, 1000, 1, 100, 1},
       {ParamId{kPidOffset}, "offset", "Offset", ParamType::I16,
-       static_cast<uint16_t>(offsetof(DummyConfig, offset)), 2, -100, 100, 1, 0},
+       static_cast<uint16_t>(offsetof(DummyConfig, offset)), 2, -100, 100, 1, 0, 1},
       {ParamId{kPidEnabled}, "enabled", "Enabled", ParamType::Bool,
-       static_cast<uint16_t>(offsetof(DummyConfig, enabled)), 1, 0, 1, 1, 1},
+       static_cast<uint16_t>(offsetof(DummyConfig, enabled)), 1, 0, 1, 1, 1, 1},
       {ParamId{kPidMode}, "mode", "Mode", ParamType::Enum,
-       static_cast<uint16_t>(offsetof(DummyConfig, mode)), 1, 0, 3, 1, 0},
+       static_cast<uint16_t>(offsetof(DummyConfig, mode)), 1, 0, 3, 1, 0, 1},
       {ParamId{kPidColor}, "color", "Color", ParamType::ColorRgb,
-       static_cast<uint16_t>(offsetof(DummyConfig, color)), 3, 0, 0xFFFFFF, 1, 0x112233},
+       static_cast<uint16_t>(offsetof(DummyConfig, color)), 3, 0, 0xFFFFFF, 1, 0x112233, 1},
   };
 
   DummyEffect e1(EffectDescriptor{EffectId{1}, "e1", "E1", nullptr}, kParams,
@@ -277,7 +277,7 @@ void test_effect_manager_v2_set_get_param_and_persistence_debounce() {
 
   static const ParamDescriptor kParams[] = {
       {ParamId{kPidDotCount}, "dot_count", "Dot Count", ParamType::U8,
-       static_cast<uint16_t>(offsetof(DummyConfig, dot_count)), 1, 0, 20, 1, 9},
+       static_cast<uint16_t>(offsetof(DummyConfig, dot_count)), 1, 0, 20, 1, 9, 1},
   };
 
   DummyEffect e1(EffectDescriptor{EffectId{1}, "e1", "E1", nullptr}, kParams,
@@ -314,7 +314,7 @@ void test_effect_manager_v2_set_active_calls_stop_start_and_events_render_flow()
 
   static const ParamDescriptor kParams[] = {
       {ParamId{kPidDotCount}, "dot_count", "Dot Count", ParamType::U8,
-       static_cast<uint16_t>(offsetof(DummyConfig, dot_count)), 1, 0, 20, 1, 9},
+       static_cast<uint16_t>(offsetof(DummyConfig, dot_count)), 1, 0, 20, 1, 9, 1},
   };
 
   DummyEffect e1(EffectDescriptor{EffectId{1}, "e1", "E1", nullptr}, kParams,
@@ -353,4 +353,3 @@ void test_effect_manager_v2_set_active_calls_stop_start_and_events_render_flow()
   TEST_ASSERT_EQUAL_UINT8(7, e2.last_render_brightness);
   TEST_ASSERT_TRUE(e2.last_render_has_bpm);
 }
-
